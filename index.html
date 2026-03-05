@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VC Scouting Model</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">VC Scouting Model</p>
+        <h1>Scouting Scoring Workbench</h1>
+      </div>
+      <div class="top-actions">
+        <button id="resetBtn" class="ghost" type="button">Reset</button>
+        <button id="exportBtn" class="ghost" type="button">Export JSON</button>
+        <label class="ghost file-label" for="importInput">Import JSON</label>
+        <input id="importInput" type="file" accept="application/json" hidden />
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar card">
+        <h2>Workspace</h2>
+        <p class="muted">Choose a section.</p>
+        <nav class="nav">
+          <button class="nav-btn is-active" data-pane="analysis" type="button">Analysis</button>
+          <button class="nav-btn" data-pane="compare" type="button">Compare</button>
+          <button class="nav-btn" data-pane="new" type="button">New Startup</button>
+          <button class="nav-btn" data-pane="table" type="button">All Startups</button>
+          <button class="nav-btn" data-pane="weights" type="button">Weights & Rubrics</button>
+        </nav>
+      </aside>
+
+      <section class="main card">
+        <section class="pane" data-pane="analysis">
+          <div class="section-head">
+            <h2>Portfolio Analysis</h2>
+            <p class="muted">Scatter first. Extra charts are optional.</p>
+          </div>
+
+          <div class="card chart-card">
+            <div class="row between">
+              <div>
+                <h3>Portfolio Scatter</h3>
+                <p class="muted">Non-financial vs financial score.</p>
+              </div>
+              <button id="toggleScatterControls" class="ghost" type="button">Scatter Controls</button>
+            </div>
+            <div id="scatterControls" class="scatter-controls" hidden>
+              <label>NF Threshold <input id="nfInput" type="number" step="1" /></label>
+              <label>F Threshold <input id="fInput" type="number" step="1" /></label>
+              <button id="useAvg" class="ghost" type="button">Use Avg</button>
+              <button id="useMedian" class="ghost" type="button">Use Median</button>
+              <label>Labels
+                <select id="labelMode">
+                  <option value="smart">Smart</option>
+                  <option value="all">All</option>
+                  <option value="none">None</option>
+                </select>
+              </label>
+            </div>
+            <canvas id="scatterCanvas" width="980" height="430"></canvas>
+            <div id="scatterLegend" class="legend"></div>
+          </div>
+
+          <details class="card collapsible">
+            <summary>More Analytics</summary>
+            <div class="grid-2">
+              <div>
+                <h3>Top Ranking</h3>
+                <canvas id="rankingCanvas" width="460" height="280"></canvas>
+              </div>
+              <div>
+                <h3>Distribution</h3>
+                <canvas id="distCanvas" width="460" height="280"></canvas>
+              </div>
+            </div>
+            <div class="analytics-extra grid-2">
+              <div class="card analytics-card">
+                <h3>Quadrant Mix</h3>
+                <p class="muted">Pie-style share of startups by quadrant.</p>
+                <canvas id="quadrantPieCanvas" width="460" height="280"></canvas>
+              </div>
+              <div class="card analytics-card">
+                <h3>Ranking Contribution</h3>
+                <p class="muted">How much top startups contribute to total portfolio score.</p>
+                <canvas id="rankingContributionCanvas" width="460" height="280"></canvas>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section class="pane" data-pane="compare" hidden>
+          <div class="section-head">
+            <h2>Startup Comparison</h2>
+            <p class="muted">Side-by-side across all metrics.</p>
+          </div>
+          <div class="card">
+            <div class="grid-4">
+              <label>Startup A <select id="compareA"></select></label>
+              <label>Startup B <select id="compareB"></select></label>
+              <label>Mode
+                <select id="compareMode">
+                  <option value="raw">Raw (1-5)</option>
+                  <option value="weighted">Weighted</option>
+                </select>
+              </label>
+              <button id="swapBtn" class="ghost" type="button">Swap</button>
+            </div>
+            <div id="compareSummary" class="summary"></div>
+            <canvas id="compareCanvas" width="980" height="420"></canvas>
+          </div>
+        </section>
+
+        <section class="pane" data-pane="new" hidden>
+          <div class="section-head">
+            <h2>New Startup</h2>
+            <p class="muted">Fill all scores and explanations before create.</p>
+          </div>
+          <div class="card">
+            <div class="grid-2">
+              <label>Startup Name <input id="newName" type="text" placeholder="e.g. NovaFlow AI" /></label>
+              <label>Template <select id="newTemplate"></select></label>
+              <label>Clone From (optional) <select id="newClone"></select></label>
+              <label>Notes Setup
+                <select id="newNotesMode">
+                  <option value="empty">Empty notes</option>
+                  <option value="rubric">Rubric placeholders</option>
+                </select>
+              </label>
+            </div>
+            <div class="row actions">
+              <button id="prefillBtn" class="ghost" type="button">Prefill</button>
+              <button id="clearBtn" class="ghost" type="button">Clear</button>
+              <button id="createBtn" type="button">Create Startup</button>
+            </div>
+            <p id="newFeedback" class="feedback" data-type="neutral"></p>
+            <p class="warn">Required: every metric must have score and explanation.</p>
+            <div id="newMetrics" class="metric-form"></div>
+
+            <details class="card collapsible inner">
+              <summary>1-5 Scoring Guidelines</summary>
+              <div class="row">
+                <label>Metric <select id="guideMetric"></select></label>
+              </div>
+              <pre id="guideText" class="guide"></pre>
+            </details>
+          </div>
+        </section>
+
+        <section class="pane" data-pane="table" hidden>
+          <div class="section-head">
+            <h2>All Startups</h2>
+            <p class="muted">Search, sort, select, delete.</p>
+          </div>
+          <div class="card">
+            <div class="grid-3">
+              <label>Search <input id="searchInput" type="text" placeholder="Search startup" /></label>
+              <label>Sort
+                <select id="sortSelect">
+                  <option value="total-desc">Total High-Low</option>
+                  <option value="total-asc">Total Low-High</option>
+                  <option value="name-asc">Name A-Z</option>
+                  <option value="name-desc">Name Z-A</option>
+                </select>
+              </label>
+              <label>Quadrant
+                <select id="quadrantSelect">
+                  <option value="all">All</option>
+                  <option value="top-right">Top-right</option>
+                  <option value="top-left">Top-left</option>
+                  <option value="bottom-right">Bottom-right</option>
+                  <option value="bottom-left">Bottom-left</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table id="table">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="pane" data-pane="weights" hidden>
+          <div class="section-head">
+            <h2>Weights & Rubrics</h2>
+            <p class="muted">Model controls and rubric text.</p>
+          </div>
+          <div class="grid-2">
+            <div class="card" id="weightsContainer"></div>
+            <div class="card">
+              <label>Metric <select id="rubricMetric"></select></label>
+              <pre id="rubricText" class="guide"></pre>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./app.js?v=20260305-score-125"></script>
+</body>
+</html>
