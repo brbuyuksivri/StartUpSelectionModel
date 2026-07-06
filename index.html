@@ -54,6 +54,10 @@
               <label>F Threshold <input id="fInput" type="number" step="1" /></label>
               <button id="useAvg" class="ghost" type="button">Use Avg</button>
               <button id="useMedian" class="ghost" type="button">Use Median</button>
+              <label class="toggle-inline">
+                <input id="focusTopNearToggle" type="checkbox" />
+                Show only top-right + near-threshold
+              </label>
               <label>Labels
                 <select id="labelMode">
                   <option value="smart">Smart</option>
@@ -70,24 +74,36 @@
             <summary>More Analytics</summary>
             <div class="grid-2">
               <div>
-                <h3>Top Ranking</h3>
+                <h3>Pipeline Quality</h3>
                 <canvas id="rankingCanvas" width="460" height="280"></canvas>
+                <p id="insightPipelineQuality" class="chart-insight"></p>
               </div>
               <div>
-                <h3>Distribution</h3>
+                <h3>Risk Dispersion</h3>
                 <canvas id="distCanvas" width="460" height="280"></canvas>
+                <p id="insightRiskDispersion" class="chart-insight"></p>
               </div>
             </div>
             <div class="analytics-extra grid-2">
               <div class="card analytics-card">
-                <h3>Quadrant Mix</h3>
+                <h3>Dealflow Balance</h3>
                 <p class="muted">Pie-style share of startups by quadrant.</p>
                 <canvas id="quadrantPieCanvas" width="460" height="280"></canvas>
+                <p id="insightDealflowBalance" class="chart-insight"></p>
               </div>
               <div class="card analytics-card">
-                <h3>Ranking Contribution</h3>
+                <h3>Conviction Concentration</h3>
                 <p class="muted">How much top startups contribute to total portfolio score.</p>
                 <canvas id="rankingContributionCanvas" width="460" height="280"></canvas>
+                <p id="insightConvictionConcentration" class="chart-insight"></p>
+              </div>
+            </div>
+            <div class="analytics-extra">
+              <div class="card analytics-card">
+                <h3>Top 5 Opportunities to Improve Score Fastest</h3>
+                <p class="muted">Weighted gap analysis to max possible score.</p>
+                <canvas id="opportunityCanvas" width="960" height="300"></canvas>
+                <p id="insightOpportunity" class="chart-insight"></p>
               </div>
             </div>
           </details>
@@ -111,6 +127,11 @@
               <button id="swapBtn" class="ghost" type="button">Swap</button>
             </div>
             <div id="compareSummary" class="summary"></div>
+            <div id="decisionSummary" class="decision-summary"></div>
+            <div class="card compare-heatmap-card">
+              <h3>Per-Metric Delta Heatmap (A - B)</h3>
+              <div id="compareHeatmap" class="compare-heatmap"></div>
+            </div>
             <canvas id="compareCanvas" width="980" height="420"></canvas>
           </div>
         </section>
@@ -154,10 +175,10 @@
         <section class="pane" data-pane="table" hidden>
           <div class="section-head">
             <h2>All Startups</h2>
-            <p class="muted">Search, sort, select, delete.</p>
+            <p class="muted">Search, sort, select, tag, stage, and manage the pipeline.</p>
           </div>
           <div class="card">
-            <div class="grid-3">
+            <div class="grid-4">
               <label>Search <input id="searchInput" type="text" placeholder="Search startup" /></label>
               <label>Sort
                 <select id="sortSelect">
@@ -176,6 +197,37 @@
                   <option value="bottom-left">Bottom-left</option>
                 </select>
               </label>
+              <label>Saved View
+                <select id="savedViewSelect">
+                  <option value="all">All pipeline</option>
+                  <option value="ic-ready">IC-ready</option>
+                  <option value="needs-diligence">Needs diligence</option>
+                  <option value="financial-weak">Financial weak</option>
+                </select>
+              </label>
+            </div>
+            <div class="bulk-toolbar">
+              <label class="bulk-check">
+                <input id="selectVisibleToggle" type="checkbox" />
+                Select visible
+              </label>
+              <div id="selectionStatus" class="bulk-status">0 selected</div>
+              <label>Tag
+                <input id="bulkTagInput" type="text" placeholder="e.g. AI, Climate, Deeptech" />
+              </label>
+              <label>Stage
+                <select id="bulkStageSelect">
+                  <option value="">Choose stage</option>
+                  <option value="sourcing">Sourcing</option>
+                  <option value="diligence">Diligence</option>
+                  <option value="ic-ready">IC-ready</option>
+                  <option value="watchlist">Watchlist</option>
+                  <option value="pass">Pass</option>
+                </select>
+              </label>
+              <button id="bulkTagBtn" class="ghost" type="button">Apply Tag</button>
+              <button id="bulkStageBtn" class="ghost" type="button">Apply Stage</button>
+              <button id="bulkDeleteBtn" class="remove-btn" type="button">Delete Selected</button>
             </div>
             <div class="table-wrap">
               <table id="table">
@@ -189,10 +241,27 @@
         <section class="pane" data-pane="weights" hidden>
           <div class="section-head">
             <h2>Weights & Rubrics</h2>
-            <p class="muted">Model controls and rubric text.</p>
+            <p class="muted">Model controls, presets, preview, and rubric text.</p>
           </div>
           <div class="grid-2">
-            <div class="card" id="weightsContainer"></div>
+            <div class="card weights-card">
+              <div class="weights-governance">
+                <div class="weights-preset-row">
+                  <label>Preset
+                    <select id="presetSelect">
+                      <option value="balanced">Balanced</option>
+                      <option value="conservative">Conservative</option>
+                      <option value="growth">Growth</option>
+                    </select>
+                  </label>
+                  <button id="applyPresetBtn" class="ghost" type="button">Load Preset</button>
+                  <button id="resetDraftWeightsBtn" class="ghost" type="button">Reset Draft</button>
+                  <button id="applyWeightsBtn" type="button">Apply Weights</button>
+                </div>
+                <div id="weightPreviewSummary" class="weight-preview-summary"></div>
+              </div>
+              <div id="weightsContainer"></div>
+            </div>
             <div class="card">
               <label>Metric <select id="rubricMetric"></select></label>
               <pre id="rubricText" class="guide"></pre>
@@ -203,6 +272,7 @@
     </main>
   </div>
 
-  <script type="module" src="./app.js?v=20260305-score-125"></script>
+  <script src="./scoring-core.js"></script>
+  <script type="module" src="./app.js?v=20260706-production-arch-1"></script>
 </body>
 </html>

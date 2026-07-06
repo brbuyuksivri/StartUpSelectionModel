@@ -1,6 +1,6 @@
 # VC VC Scouting Web App
 
-A standalone web app that reproduces the scoring behavior of `VC_Scouting.xlsx` and exposes the internal metric notes/rubrics in an easier UI.
+A web app that reproduces the scoring behavior of `VC_Scouting.xlsx`, exposes the internal metric notes/rubrics in an easier UI, and now persists app data through a PostgreSQL-backed API server.
 
 ## What it does
 
@@ -10,7 +10,8 @@ A standalone web app that reproduces the scoring behavior of `VC_Scouting.xlsx` 
 - Supports inline editing of candidate scores and weights
 - Shows per-candidate rationale notes (from `Internal_Info_DB` sheet)
 - Includes metric scoring rubrics (criteria text used in the model)
-- Saves changes locally in the browser (`localStorage`)
+- Persists model and candidate data in PostgreSQL through a local API server
+- Keeps only UI preferences in the browser (`localStorage`)
 - Supports JSON import/export for scenario sharing
 
 ## Files
@@ -18,20 +19,39 @@ A standalone web app that reproduces the scoring behavior of `VC_Scouting.xlsx` 
 - `/index.html` - App shell
 - `/styles.css` - UI styling
 - `/app.js` - Scoring engine + interactivity
+- `/server.js` - compatibility entrypoint for the modular API server
+- `/api.server.js` - modular HTTP server bootstrap
+- `/api.database.js` - PostgreSQL persistence layer
+- `/api.bootstrap.service.js` - bootstrap snapshot service
+- `/api.snapshot.service.js` - snapshot save/reset/import/export service
+- `/startups.service.js` - startup domain service
+- `/scorecards.service.js` - scorecard domain service
+- `/weights.service.js` - weights domain service
+- `/evaluations.service.js` - evaluations domain service
+- `/scoring-core.js` - shared scoring logic for backend/frontend migration
+- `/worker.js` - async worker scaffold
 - `/data/vc_scouting.json` - Extracted workbook data used by the app
+- `/migration.0001_initial.sql` - initial PostgreSQL schema migration
+- `/migrate.js` - PostgreSQL migration runner
 - `/scripts/extract_vc_scouting.py` - Extracts data from the source Excel (`.xlsx` XML)
+- `/ARCHITECTURE.md` - current modular target and migration notes
 
 ## Run locally
 
 From this folder:
 
 ```bash
-python3 -m http.server 8000
+npm install
+export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/vc_scouting
+node migrate.js
+node server.js
 ```
 
 Then open:
 
 - [http://127.0.0.1:8000](http://127.0.0.1:8000)
+
+The first run expects PostgreSQL to be available through `DATABASE_URL`. Migrations create the schema, and the API seeds the tables from `/data/vc_scouting.json` if the database is empty.
 
 ## Regenerate data from the Excel file
 

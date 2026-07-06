@@ -1,5 +1,13 @@
-const DATA_URL = './data/vc_scouting.json';
-const STORAGE_KEY = 'vc-scouting-model-v2';
+const DATA_URL = '/api/bootstrap';
+const FALLBACK_DATA_URL = './data/vc_scouting.json';
+const EXPORT_URL = '/api/export';
+const IMPORT_URL = '/api/import';
+const RESET_URL = '/api/reset';
+const SNAPSHOT_URL = '/api/snapshot';
+const STARTUPS_URL = '/api/startups';
+const WEIGHTS_PREVIEW_URL = '/api/weights/preview';
+const STORAGE_KEY = 'vc-scouting-model-ui-v2';
+const scoringCore = globalThis.VCScoringCore;
 const SCORE_OPTIONS = ['', 1, 2, 3, 4, 5];
 const METRIC_NAME_LIST = [
   'Ekip Yapısı',
@@ -25,6 +33,7 @@ const els = {
   fInput: document.getElementById('fInput'),
   useAvg: document.getElementById('useAvg'),
   useMedian: document.getElementById('useMedian'),
+  focusTopNearToggle: document.getElementById('focusTopNearToggle'),
   labelMode: document.getElementById('labelMode'),
   scatterCanvas: document.getElementById('scatterCanvas'),
   scatterLegend: document.getElementById('scatterLegend'),
@@ -32,12 +41,20 @@ const els = {
   distCanvas: document.getElementById('distCanvas'),
   quadrantPieCanvas: document.getElementById('quadrantPieCanvas'),
   rankingContributionCanvas: document.getElementById('rankingContributionCanvas'),
+  opportunityCanvas: document.getElementById('opportunityCanvas'),
+  insightPipelineQuality: document.getElementById('insightPipelineQuality'),
+  insightRiskDispersion: document.getElementById('insightRiskDispersion'),
+  insightDealflowBalance: document.getElementById('insightDealflowBalance'),
+  insightConvictionConcentration: document.getElementById('insightConvictionConcentration'),
+  insightOpportunity: document.getElementById('insightOpportunity'),
 
   compareA: document.getElementById('compareA'),
   compareB: document.getElementById('compareB'),
   compareMode: document.getElementById('compareMode'),
   swapBtn: document.getElementById('swapBtn'),
   compareSummary: document.getElementById('compareSummary'),
+  decisionSummary: document.getElementById('decisionSummary'),
+  compareHeatmap: document.getElementById('compareHeatmap'),
   compareCanvas: document.getElementById('compareCanvas'),
 
   newName: document.getElementById('newName'),
@@ -55,9 +72,22 @@ const els = {
   searchInput: document.getElementById('searchInput'),
   sortSelect: document.getElementById('sortSelect'),
   quadrantSelect: document.getElementById('quadrantSelect'),
+  savedViewSelect: document.getElementById('savedViewSelect'),
+  selectVisibleToggle: document.getElementById('selectVisibleToggle'),
+  selectionStatus: document.getElementById('selectionStatus'),
+  bulkTagInput: document.getElementById('bulkTagInput'),
+  bulkStageSelect: document.getElementById('bulkStageSelect'),
+  bulkTagBtn: document.getElementById('bulkTagBtn'),
+  bulkStageBtn: document.getElementById('bulkStageBtn'),
+  bulkDeleteBtn: document.getElementById('bulkDeleteBtn'),
   table: document.getElementById('table'),
 
   weightsContainer: document.getElementById('weightsContainer'),
+  presetSelect: document.getElementById('presetSelect'),
+  applyPresetBtn: document.getElementById('applyPresetBtn'),
+  resetDraftWeightsBtn: document.getElementById('resetDraftWeightsBtn'),
+  applyWeightsBtn: document.getElementById('applyWeightsBtn'),
+  weightPreviewSummary: document.getElementById('weightPreviewSummary'),
   rubricMetric: document.getElementById('rubricMetric'),
   rubricText: document.getElementById('rubricText'),
 };
@@ -73,15 +103,23 @@ const state = {
   search: '',
   sort: 'total-desc',
   quadrant: 'all',
+  savedView: 'all',
   compareA: null,
   compareB: null,
   compareMode: 'raw',
   newDraft: null,
+  selectedRows: [],
+  draftWeights: {},
+  weightPreset: 'balanced',
   scatterPoints: [],
   scatterHoverId: null,
   scatterSelectedId: null,
   scatterFrame: null,
   scatterTooltipEl: null,
+  scatterFocusTopNear: false,
+  persistTimer: null,
+  serverMode: true,
+  weightPreviewData: null,
 };
 
 function uid() {
@@ -117,6 +155,14 @@ function getRubrics() {
   return state.model.metricRubrics;
 }
 
+function getNewStartupMetrics() {
+  return getMetrics().slice(0, 8);
+}
+
+function setDraftWeightsFromModel() {
+  state.draftWeights = scoringCore.createWeightsMap(getMetrics());
+}
+
 function applyMetricNameOverrides(model) {
   const byColumn = new Map();
   model.weights.forEach((m, idx) => {
@@ -129,41 +175,12 @@ function applyMetricNameOverrides(model) {
   });
 }
 
-function weightsMap() {
-  return Object.fromEntries(getMetrics().map((m) => [m.column, Number(m.weight) || 0]));
-}
-
 function computeScores(candidate) {
-  const w = weightsMap();
-  const NF = ['B', 'C', 'D', 'E', 'F'];
-  const F = ['G', 'H', 'I', 'J', 'K'];
-  const sum = (cols) => cols.reduce((s, c) => s + (num(candidate.scores[c]) ?? 0) * (w[c] ?? 0), 0);
-  const nonFinancial = sum(NF);
-  const financial = sum(F);
-  const intuition = (num(candidate.scores.L) ?? 0) * (w.L ?? 0);
-  return {
-    nonFinancial,
-    financial,
-    total: nonFinancial + financial + intuition,
-  };
+  return scoringCore.computeCandidate(candidate, getMetrics());
 }
 
 function recomputeAll() {
-  state.candidates.forEach((c) => {
-    c.computed = computeScores(c);
-  });
-}
-
-function avg(arr) {
-  if (!arr.length) return 0;
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
-
-function median(arr) {
-  if (!arr.length) return 0;
-  const s = [...arr].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  state.candidates = scoringCore.computePortfolio(state.candidates, getMetrics());
 }
 
 function quadrantOf(c) {
@@ -181,6 +198,7 @@ function visibleCandidates() {
   const s = state.search.trim().toLowerCase();
   if (s) rows = rows.filter((c) => c.name.toLowerCase().includes(s));
   if (q !== 'all') rows = rows.filter((c) => quadrantOf(c) === q);
+  rows = rows.filter((c) => passesSavedView(c));
   rows.sort((a, b) => {
     if (state.sort === 'name-asc') return a.name.localeCompare(b.name);
     if (state.sort === 'name-desc') return b.name.localeCompare(a.name);
@@ -200,9 +218,11 @@ function escapeHtml(s) {
 }
 
 function maxTotals() {
-  const w = weightsMap();
-  const cols = getMetrics().map((m) => m.column);
-  return cols.reduce((sum, c) => sum + 5 * (w[c] ?? 0), 0);
+  return scoringCore.maxPossibleTotal(getMetrics(), 5);
+}
+
+function pointQuality(candidate) {
+  return scoringCore.pointQuality(candidate, getMetrics());
 }
 
 function getCandidateById(id) {
@@ -310,6 +330,13 @@ function prepareCanvas(canvas) {
 
 function serialize() {
   return {
+    ...serializeServerSnapshot(),
+    ui: serializeUi(),
+  };
+}
+
+function serializeServerSnapshot() {
+  return {
     model: clone(state.model),
     candidates: state.candidates.map((c) => ({
       id: c.id,
@@ -320,25 +347,79 @@ function serialize() {
       notes: clone(c.notes),
       computedFromExcel: clone(c.computedFromExcel),
       isNew: !!c.isNew,
+      tags: clone(candidateTags(c)),
+      stage: candidateStage(c),
     })),
-    ui: {
-      activePane: state.activePane,
-      scatterControlsOpen: state.scatterControlsOpen,
-      thresholds: clone(state.thresholds),
-      labelMode: state.labelMode,
-      search: state.search,
-      sort: state.sort,
-      quadrant: state.quadrant,
-      compareA: state.compareA,
-      compareB: state.compareB,
-      compareMode: state.compareMode,
-      scatterSelectedId: state.scatterSelectedId,
-    },
   };
 }
 
+function serializeUi() {
+  return {
+    activePane: state.activePane,
+    scatterControlsOpen: state.scatterControlsOpen,
+    thresholds: clone(state.thresholds),
+    labelMode: state.labelMode,
+    search: state.search,
+    sort: state.sort,
+    quadrant: state.quadrant,
+    savedView: state.savedView,
+    compareA: state.compareA,
+    compareB: state.compareB,
+    compareMode: state.compareMode,
+    scatterSelectedId: state.scatterSelectedId,
+    scatterFocusTopNear: state.scatterFocusTopNear,
+    weightPreset: state.weightPreset,
+  };
+}
+
+function saveUi() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ui: serializeUi() }));
+}
+
+async function persistServerSnapshot() {
+  if (!state.serverMode) return;
+  try {
+    const res = await fetch(SNAPSHOT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(serializeServerSnapshot()),
+    });
+    if (!res.ok) throw new Error(`Persist failed: ${res.status}`);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function schedulePersist() {
+  clearTimeout(state.persistTimer);
+  state.persistTimer = setTimeout(() => {
+    persistServerSnapshot();
+  }, 180);
+}
+
 function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+  saveUi();
+  if (state.serverMode) schedulePersist();
+}
+
+async function apiJson(url, options = {}) {
+  const res = await fetch(url, options);
+  if (!res.ok) throw new Error(`${options.method || 'GET'} ${url} failed: ${res.status}`);
+  return res.json();
+}
+
+async function fetchBootstrapSnapshot() {
+  try {
+    const res = await fetch(DATA_URL);
+    if (!res.ok) throw new Error(`Failed to load data: ${res.status}`);
+    state.serverMode = true;
+    return await res.json();
+  } catch (error) {
+    const fallback = await fetch(FALLBACK_DATA_URL);
+    if (!fallback.ok) throw error;
+    state.serverMode = false;
+    return await fallback.json();
+  }
 }
 
 function loadSaved() {
@@ -364,14 +445,20 @@ function hydrate(snapshot) {
   state.search = ui.search || '';
   state.sort = ui.sort || 'total-desc';
   state.quadrant = ui.quadrant || 'all';
+  state.savedView = ui.savedView || 'all';
   state.compareA = ui.compareA || state.candidates[0]?.id || null;
   state.compareB = ui.compareB || state.candidates.find((c) => c.id !== state.compareA)?.id || state.compareA;
   state.compareMode = ui.compareMode || 'raw';
   state.scatterSelectedId = ui.scatterSelectedId || null;
+  state.scatterFocusTopNear = Boolean(ui.scatterFocusTopNear);
+  state.weightPreset = ui.weightPreset || 'balanced';
+  state.selectedRows = [];
+  state.weightPreviewData = null;
 
   recomputeAll();
-  if (state.thresholds.nf === null) state.thresholds.nf = Math.round(avg(state.candidates.map((c) => c.computed.nonFinancial)));
-  if (state.thresholds.f === null) state.thresholds.f = Math.round(avg(state.candidates.map((c) => c.computed.financial)));
+  setDraftWeightsFromModel();
+  if (state.thresholds.nf === null) state.thresholds.nf = Math.round(scoringCore.average(state.candidates.map((c) => c.computed.nonFinancial)));
+  if (state.thresholds.f === null) state.thresholds.f = Math.round(scoringCore.average(state.candidates.map((c) => c.computed.financial)));
 }
 
 function freshSnapshot() {
@@ -386,6 +473,8 @@ function freshSnapshot() {
       notes: clone(c.notes || {}),
       computedFromExcel: clone(c.computedFromExcel || null),
       isNew: false,
+      tags: [],
+      stage: 'sourcing',
     })),
     ui: {},
   };
@@ -404,7 +493,7 @@ function setPane(pane) {
 function renderScatter() {
   const canvas = els.scatterCanvas;
   const { ctx, width: W, height: H } = prepareCanvas(canvas);
-  const rows = visibleCandidates();
+  const baseRows = visibleCandidates();
   const pad = { l: 64, r: 24, t: 24, b: 64 };
   const plot = { x: pad.l, y: pad.t, w: W - pad.l - pad.r, h: H - pad.t - pad.b };
 
@@ -412,6 +501,16 @@ function renderScatter() {
   const maxF = Math.max(1, ...state.candidates.map((c) => c.computed.financial), Number(state.thresholds.f || 0));
   const xMax = Math.ceil(maxNF / 10) * 10;
   const yMax = Math.ceil(maxF / 10) * 10;
+  const nearBandNF = Math.max(8, xMax * 0.08);
+  const nearBandF = Math.max(5, yMax * 0.08);
+  const rows = state.scatterFocusTopNear
+    ? baseRows.filter((c) => {
+        const q = quadrantOf(c);
+        const nearNF = Math.abs(c.computed.nonFinancial - Number(state.thresholds.nf || 0)) <= nearBandNF;
+        const nearF = Math.abs(c.computed.financial - Number(state.thresholds.f || 0)) <= nearBandF;
+        return q === 'top-right' || nearNF || nearF;
+      })
+    : baseRows;
   state.scatterFrame = { plot, xMax, yMax };
 
   ctx.fillStyle = '#ffffff';
@@ -445,6 +544,21 @@ function renderScatter() {
   ctx.beginPath(); ctx.moveTo(plot.x, toY(state.thresholds.f)); ctx.lineTo(plot.x + plot.w, toY(state.thresholds.f)); ctx.stroke();
   ctx.setLineDash([]);
 
+  const zoneLabel = (text, x, y, tone) => {
+    ctx.fillStyle = tone;
+    ctx.font = '700 12px "Helvetica Neue", Helvetica, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, x, y);
+  };
+  const cxLeft = (plot.x + toX(state.thresholds.nf)) / 2;
+  const cxRight = (toX(state.thresholds.nf) + plot.x + plot.w) / 2;
+  const cyTop = (plot.y + toY(state.thresholds.f)) / 2;
+  const cyBottom = (toY(state.thresholds.f) + plot.y + plot.h) / 2;
+  zoneLabel('WATCH', cxLeft, cyTop, 'rgba(47,107,255,0.55)');
+  zoneLabel('INVEST', cxRight, cyTop, 'rgba(0,163,163,0.62)');
+  zoneLabel('WATCH', cxRight, cyBottom, 'rgba(19,185,129,0.55)');
+  zoneLabel('PASS', cxLeft, cyBottom, 'rgba(148,163,184,0.62)');
+
   const color = (q) => q === 'top-right' ? '#00a3a3' : q === 'top-left' ? '#2f6bff' : q === 'bottom-right' ? '#13b981' : '#94a3b8';
 
   state.scatterPoints = rows.map((c) => {
@@ -455,6 +569,7 @@ function renderScatter() {
       x: toX(c.computed.nonFinancial),
       y: toY(c.computed.financial),
       quadrant: q,
+      quality: pointQuality(c),
     };
   });
 
@@ -462,21 +577,30 @@ function renderScatter() {
   if (state.scatterSelectedId && !getScatterPointById(state.scatterSelectedId)) state.scatterSelectedId = null;
 
   const drawCircle = (p) => {
+    const conf = p.quality.confidence;
+    const cov = p.quality.coverage;
+    const confColor = conf >= 0.75 ? '#0f766e' : conf >= 0.5 ? '#d97706' : '#b91c1c';
+    const baseR = 5.5 + cov * 2.6;
     if (p.id === state.scatterSelectedId) {
       ctx.fillStyle = 'rgba(47,107,255,0.15)';
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, baseR + 5.2, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.fillStyle = color(p.quadrant);
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.id === state.scatterHoverId ? 8 : 6.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, p.id === state.scatterHoverId ? baseR + 1.8 : baseR, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = confColor;
+    ctx.lineWidth = 1 + conf * 1.4;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, baseR + 0.4, 0, Math.PI * 2);
+    ctx.stroke();
     if (p.id === state.scatterHoverId || p.id === state.scatterSelectedId) {
       ctx.strokeStyle = '#0f172a';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.id === state.scatterHoverId ? 9 : 8, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, p.id === state.scatterHoverId ? baseR + 2.8 : baseR + 2.2, 0, Math.PI * 2);
       ctx.stroke();
       ctx.lineWidth = 1;
     }
@@ -541,10 +665,11 @@ function renderScatter() {
   const pinText = pinPoint && !hoverPoint
     ? ` · Selected: ${pinPoint.candidate.name} (NF ${fmt(pinPoint.candidate.computed.nonFinancial)}, F ${fmt(pinPoint.candidate.computed.financial)}, Total ${fmt(pinPoint.candidate.computed.total)})`
     : '';
-  els.scatterLegend.textContent = `Top-right ${counts['top-right']} · Top-left ${counts['top-left']} · Bottom-right ${counts['bottom-right']} · Bottom-left ${counts['bottom-left']}${hoverText}${pinText}`;
+  const focusText = state.scatterFocusTopNear ? ' · Focus: top-right + near-threshold' : '';
+  els.scatterLegend.textContent = `Top-right ${counts['top-right']} · Top-left ${counts['top-left']} · Bottom-right ${counts['bottom-right']} · Bottom-left ${counts['bottom-left']} · Ring color=confidence, size=coverage${focusText}${hoverText}${pinText}`;
 }
 
-function drawBars(canvas, labels, values, color = '#2f6bff') {
+function drawBars(canvas, labels, values, color = '#2f6bff', options = {}) {
   const { ctx, width: W, height: H } = prepareCanvas(canvas);
   const pad = { l: 52, r: 18, t: 16, b: 84 };
   const plot = { x: pad.l, y: pad.t, w: W - pad.l - pad.r, h: H - pad.t - pad.b };
@@ -557,6 +682,23 @@ function drawBars(canvas, labels, values, color = '#2f6bff') {
   for (let i = 0; i <= 4; i++) {
     const y = plot.y + plot.h * i / 4;
     ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.x + plot.w, y); ctx.stroke();
+  }
+
+  if (Array.isArray(options.benchmarks)) {
+    options.benchmarks.forEach((b) => {
+      const y = plot.y + plot.h - (Math.max(0, b.value) / maxV) * plot.h;
+      ctx.setLineDash([6, 5]);
+      ctx.strokeStyle = b.color || '#64748b';
+      ctx.beginPath();
+      ctx.moveTo(plot.x, y);
+      ctx.lineTo(plot.x + plot.w, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = b.color || '#64748b';
+      ctx.font = '10px "Helvetica Neue", Helvetica, Arial, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(b.label, plot.x + 4, y - 4);
+    });
   }
 
   const fitText = (text, maxWidth) => {
@@ -611,7 +753,24 @@ function drawBars(canvas, labels, values, color = '#2f6bff') {
 
 function renderRanking() {
   const rows = [...visibleCandidates()].slice(0, 8);
-  drawBars(els.rankingCanvas, rows.map((r) => r.name), rows.map((r) => r.computed.total), '#2f6bff');
+  const vals = rows.map((r) => r.computed.total);
+  const portfolioTotals = state.candidates.map((c) => c.computed.total);
+  const med = scoringCore.median(portfolioTotals);
+  const maxTotal = maxTotals();
+  const target = maxTotal * 0.7;
+  const cutoff = maxTotal * 0.82;
+  drawBars(els.rankingCanvas, rows.map((r) => r.name), vals, '#2f6bff', {
+    benchmarks: [
+      { label: `Median ${fmt(med)}`, value: med, color: '#64748b' },
+      { label: `Target ${fmt(target)}`, value: target, color: '#2563eb' },
+      { label: `Partner cutoff ${fmt(cutoff)}`, value: cutoff, color: '#059669' },
+    ],
+  });
+  if (els.insightPipelineQuality) {
+    const aboveTarget = vals.filter((v) => v >= target).length;
+    const aboveCutoff = vals.filter((v) => v >= cutoff).length;
+    els.insightPipelineQuality.textContent = `${aboveTarget}/${rows.length} top startups are above target, and ${aboveCutoff}/${rows.length} exceed partner cutoff. Focus diligence on startups just below cutoff for fastest IC-ready growth.`;
+  }
 }
 
 function renderDistribution() {
@@ -627,7 +786,22 @@ function renderDistribution() {
     counts[idx] += 1;
   });
   const labels = counts.map((_, i) => `${fmt(min + i * step, 0)}+`);
-  drawBars(els.distCanvas, labels, counts, '#00a3a3');
+  const med = scoringCore.median(vals);
+  const maxTotal = maxTotals();
+  const target = maxTotal * 0.7;
+  const cutoff = maxTotal * 0.82;
+  drawBars(els.distCanvas, labels, counts, '#00a3a3', {
+    benchmarks: [
+      { label: 'Median bucket', value: counts[Math.min(bins - 1, Math.floor((med - min) / step))] || 0, color: '#64748b' },
+      { label: 'Target bucket', value: counts[Math.min(bins - 1, Math.floor((target - min) / step))] || 0, color: '#2563eb' },
+      { label: 'Cutoff bucket', value: counts[Math.min(bins - 1, Math.floor((cutoff - min) / step))] || 0, color: '#059669' },
+    ],
+  });
+  if (els.insightRiskDispersion) {
+    const high = vals.filter((v) => v >= cutoff).length;
+    const low = vals.filter((v) => v < target).length;
+    els.insightRiskDispersion.textContent = `${high} startups sit in the high-conviction band, while ${low} remain below target. Risk is concentrated in the lower tail; prioritize de-risking those with strong market signal.`;
+  }
 }
 
 function renderQuadrantPieChart() {
@@ -686,6 +860,13 @@ function renderQuadrantPieChart() {
     ctx.font = '12px "Helvetica Neue", Helvetica, Arial, sans-serif';
     ctx.fillText(`${name}: ${val} (${pct}%)`, lx + 18, y);
   });
+
+  if (els.insightDealflowBalance) {
+    const tr = values[0] || 0;
+    const bl = values[3] || 0;
+    const concentration = Math.round((tr / total) * 100);
+    els.insightDealflowBalance.textContent = `Dealflow is ${concentration}% concentrated in Invest zone, with ${bl} startups in Pass zone. Balance is healthy if Watch zones stay fed by new high-upside candidates.`;
+  }
 }
 
 function renderRankingContributionChart() {
@@ -756,6 +937,39 @@ function renderRankingContributionChart() {
     ctx.fillStyle = '#00a3a3';
     ctx.fillText(`${Math.round(cumPct[i])}%`, cx, H - 12);
   });
+
+  if (els.insightConvictionConcentration) {
+    const top3 = rows.slice(0, 3).reduce((s, r) => s + r.computed.total, 0);
+    const shareTop3 = Math.round((top3 / total) * 100);
+    els.insightConvictionConcentration.textContent = `Top 3 startups account for ${shareTop3}% of top-10 conviction score. This indicates ${shareTop3 > 45 ? 'high' : 'moderate'} concentration risk across your highest-ranked pipeline.`;
+  }
+}
+
+function renderOpportunityChart() {
+  if (!els.opportunityCanvas) return;
+  const maxTotal = maxTotals();
+  const rows = [...state.candidates]
+    .map((c) => ({ ...c, gap: Math.max(0, maxTotal - c.computed.total) }))
+    .sort((a, b) => b.gap - a.gap)
+    .slice(0, 5);
+  drawBars(
+    els.opportunityCanvas,
+    rows.map((r) => r.name),
+    rows.map((r) => r.gap),
+    '#7c3aed',
+    {
+      benchmarks: [
+        { label: `Median gap ${fmt(scoringCore.median(rows.map((r) => r.gap)))}`, value: scoringCore.median(rows.map((r) => r.gap)), color: '#64748b' },
+      ],
+    },
+  );
+  if (els.insightOpportunity) {
+    const avgGap = rows.length ? scoringCore.average(rows.map((r) => r.gap)) : 0;
+    const best = rows[0];
+    els.insightOpportunity.textContent = best
+      ? `${best.name} has the largest weighted upside gap (${fmt(best.gap)} points). Closing even 30% of average gap (${fmt(avgGap * 0.3)}) can materially shift ranking outcomes.`
+      : 'No opportunity gap data available.';
+  }
 }
 
 function ensureCompareSelection() {
@@ -769,6 +983,7 @@ function ensureCompareSelection() {
 
 function renderCompare() {
   ensureCompareSelection();
+  const compareMetrics = getNewStartupMetrics();
   const sorted = [...state.candidates].sort((a, b) => a.name.localeCompare(b.name));
 
   for (const [el, value] of [[els.compareA, state.compareA], [els.compareB, state.compareB]]) {
@@ -787,9 +1002,9 @@ function renderCompare() {
   const b = state.candidates.find((c) => c.id === state.compareB);
   if (!a || !b) return;
 
-  const winsA = getMetrics().filter((m) => (num(a.scores[m.column]) ?? 0) > (num(b.scores[m.column]) ?? 0)).length;
-  const winsB = getMetrics().filter((m) => (num(b.scores[m.column]) ?? 0) > (num(a.scores[m.column]) ?? 0)).length;
-  const ties = getMetrics().length - winsA - winsB;
+  const winsA = compareMetrics.filter((m) => (num(a.scores[m.column]) ?? 0) > (num(b.scores[m.column]) ?? 0)).length;
+  const winsB = compareMetrics.filter((m) => (num(b.scores[m.column]) ?? 0) > (num(a.scores[m.column]) ?? 0)).length;
+  const ties = compareMetrics.length - winsA - winsB;
   const cards = [
     ['A Total', fmt(a.computed.total)],
     ['B Total', fmt(b.computed.total)],
@@ -800,7 +1015,34 @@ function renderCompare() {
   ];
   els.compareSummary.innerHTML = cards.map(([k, v]) => `<div class="kpi"><div class="muted">${escapeHtml(k)}</div><strong>${escapeHtml(String(v))}</strong></div>`).join('');
 
-  const metrics = getMetrics();
+  const deltas = compareMetrics.map((m) => {
+    const wa = (num(a.scores[m.column]) ?? 0) * (Number(m.weight) || 0);
+    const wb = (num(b.scores[m.column]) ?? 0) * (Number(m.weight) || 0);
+    return { label: m.label, delta: wa - wb };
+  });
+  const strengths = [...deltas].sort((x, y) => y.delta - x.delta).slice(0, 3).filter((d) => d.delta > 0);
+  const risks = [...deltas].sort((x, y) => x.delta - y.delta).slice(0, 3).filter((d) => d.delta < 0);
+  const winner = a.computed.total === b.computed.total ? 'Tie' : (a.computed.total > b.computed.total ? a.name : b.name);
+  if (els.decisionSummary) {
+    els.decisionSummary.innerHTML = [
+      ['Winner by weighted score', winner],
+      ['Biggest strengths', strengths.length ? strengths.map((s) => `${s.label} (+${fmt(s.delta)})`).join(' · ') : 'None'],
+      ['Biggest risks', risks.length ? risks.map((r) => `${r.label} (${fmt(r.delta)})`).join(' · ') : 'None'],
+    ].map(([k, v]) => `<div class="decision-item"><strong>${escapeHtml(k)}</strong><span>${escapeHtml(v)}</span></div>`).join('');
+  }
+  if (els.compareHeatmap) {
+    const maxAbs = Math.max(1, ...deltas.map((d) => Math.abs(d.delta)));
+    els.compareHeatmap.innerHTML = deltas.map((d) => {
+      const ratio = Math.abs(d.delta) / maxAbs;
+      const tone = d.delta >= 0
+        ? `rgba(5, 150, 105, ${0.15 + ratio * 0.55})`
+        : `rgba(220, 38, 38, ${0.15 + ratio * 0.55})`;
+      const val = d.delta > 0 ? `+${fmt(d.delta)}` : fmt(d.delta);
+      return `<div class="heat-cell" style="background:${tone}"><strong>${escapeHtml(d.label)}</strong><span>${escapeHtml(val)}</span></div>`;
+    }).join('');
+  }
+
+  const metrics = compareMetrics;
   const labels = metrics.map((m) => ({
     short: displayColumn(m.column),
     name: m.label,
@@ -931,7 +1173,7 @@ function buildDraftFromSelections() {
   const cloneC = state.candidates.find((c) => c.id === cloneId) || null;
   const tScores = templateScores(els.newTemplate.value || 'balanced');
 
-  getMetrics().forEach((m) => {
+  getNewStartupMetrics().forEach((m) => {
     if (cloneC) {
       draft.scores[m.column] = num(cloneC.scores[m.column]) ?? tScores[m.column] ?? null;
       draft.notes[m.column] = (cloneC.notes?.[m.column] || '').trim();
@@ -942,6 +1184,26 @@ function buildDraftFromSelections() {
   });
 
   state.newDraft = draft;
+}
+
+function getNewStartupSections() {
+  const metrics = getNewStartupMetrics();
+  return [
+    { key: 'core', title: 'Core', metrics: metrics.slice(0, 2), open: true },
+    { key: 'market', title: 'Market', metrics: metrics.slice(2, 4), open: false },
+    { key: 'financial', title: 'Financial', metrics: metrics.slice(4, 6), open: false },
+    { key: 'exit', title: 'Exit', metrics: metrics.slice(6, 8), open: false },
+  ].filter((s) => s.metrics.length > 0);
+}
+
+function sectionCompletion(metrics, draft) {
+  let done = 0;
+  metrics.forEach((m) => {
+    const scoreFilled = num(draft.scores[m.column]) !== null;
+    const noteFilled = Boolean((draft.notes[m.column] || '').trim());
+    if (scoreFilled && noteFilled) done += 1;
+  });
+  return { done, total: metrics.length };
 }
 
 function renderNewForm() {
@@ -978,37 +1240,59 @@ function renderNewForm() {
   if (!state.newDraft) buildDraftFromSelections();
 
   els.newMetrics.innerHTML = '';
-  getMetrics().forEach((m) => {
-    const row = document.createElement('div');
-    row.className = 'metric-row';
+  const sections = getNewStartupSections();
+  sections.forEach((section) => {
+    const block = document.createElement('details');
+    block.className = 'new-section';
+    block.dataset.section = section.key;
+    block.open = section.open;
 
-    const head = document.createElement('div');
-    head.className = 'metric-head';
-    head.innerHTML = `<span>${escapeHtml(displayColumn(m.column))} · ${escapeHtml(m.label)}</span><span class="muted">Weight: ${escapeHtml(String(m.weight))}</span>`;
+    const comp = sectionCompletion(section.metrics, state.newDraft);
+    const allDone = comp.done === comp.total && comp.total > 0;
+    const summary = document.createElement('summary');
+    summary.className = 'new-section-summary';
+    summary.innerHTML = `
+      <span class="new-section-title">${escapeHtml(section.title)}</span>
+      <span class="new-section-status ${allDone ? 'is-done' : ''}">
+        ${escapeHtml(String(comp.done))}/${escapeHtml(String(comp.total))} completed
+      </span>
+    `;
+    block.appendChild(summary);
 
-    const sl = document.createElement('label');
-    sl.textContent = 'Score';
-    const select = scoreSelect(state.newDraft.scores[m.column], (v) => { state.newDraft.scores[m.column] = v; });
-    select.dataset.metric = m.column;
-    select.dataset.role = 'score';
-    sl.appendChild(select);
+    section.metrics.forEach((m) => {
+      const row = document.createElement('div');
+      row.className = 'metric-row';
 
-    const nl = document.createElement('label');
-    nl.textContent = 'Explanation';
-    const ta = document.createElement('textarea');
-    ta.rows = 3;
-    ta.placeholder = 'Write evidence and rationale.';
-    ta.value = state.newDraft.notes[m.column] || '';
-    ta.dataset.metric = m.column;
-    ta.dataset.role = 'note';
-    ta.addEventListener('input', () => { state.newDraft.notes[m.column] = ta.value; });
-    nl.appendChild(ta);
+      const head = document.createElement('div');
+      head.className = 'metric-head';
+      head.innerHTML = `<span>${escapeHtml(displayColumn(m.column))} · ${escapeHtml(m.label)}</span><span class="muted">Weight: ${escapeHtml(String(m.weight))}</span>`;
 
-    row.append(head, sl, nl);
-    els.newMetrics.appendChild(row);
+      const sl = document.createElement('label');
+      sl.textContent = 'Score';
+      const select = scoreSelect(state.newDraft.scores[m.column], (v) => { state.newDraft.scores[m.column] = v; });
+      select.dataset.metric = m.column;
+      select.dataset.role = 'score';
+      sl.appendChild(select);
+
+      const nl = document.createElement('label');
+      nl.textContent = 'Explanation';
+      const ta = document.createElement('textarea');
+      ta.rows = 3;
+      ta.placeholder = 'Write evidence and rationale.';
+      ta.value = state.newDraft.notes[m.column] || '';
+      ta.dataset.metric = m.column;
+      ta.dataset.role = 'note';
+      ta.addEventListener('input', () => { state.newDraft.notes[m.column] = ta.value; });
+      nl.appendChild(ta);
+
+      row.append(head, sl, nl);
+      block.appendChild(row);
+    });
+
+    els.newMetrics.appendChild(block);
   });
 
-  const rubrics = getRubrics();
+  const rubrics = getRubrics().filter((r) => getNewStartupMetrics().some((m) => m.column === r.column));
   const current = els.guideMetric.value || rubrics[0]?.column;
   els.guideMetric.innerHTML = '';
   rubrics.forEach((r) => {
@@ -1032,7 +1316,7 @@ function setFeedback(msg, type = 'neutral') {
 }
 
 function validateDraft() {
-  for (const m of getMetrics()) {
+  for (const m of getNewStartupMetrics()) {
     const s = num(state.newDraft.scores[m.column]);
     const n = (state.newDraft.notes[m.column] || '').trim();
     if (s === null) return { ok: false, message: `Missing score for ${displayColumn(m.column)}.`, metric: m.column, role: 'score' };
@@ -1056,16 +1340,170 @@ function uniqueName(name) {
   return `${base} (${i})`;
 }
 
+function candidateTags(candidate) {
+  return Array.isArray(candidate.tags) ? candidate.tags.filter(Boolean) : [];
+}
+
+function candidateStage(candidate) {
+  return candidate.stage || 'sourcing';
+}
+
+function passesSavedView(candidate) {
+  const quality = pointQuality(candidate);
+  if (state.savedView === 'ic-ready') {
+    return quadrantOf(candidate) === 'top-right'
+      && candidate.computed.total >= scoringCore.median(state.candidates.map((c) => c.computed.total))
+      && quality.coverage >= 0.9
+      && quality.confidence >= 0.8;
+  }
+  if (state.savedView === 'needs-diligence') {
+    return quality.coverage < 1 || quality.confidence < 0.75 || candidateStage(candidate) === 'diligence';
+  }
+  if (state.savedView === 'financial-weak') {
+    return candidate.computed.financial < Number(state.thresholds.f || 0);
+  }
+  return true;
+}
+
+function selectedRowSet() {
+  return new Set(state.selectedRows);
+}
+
+function visibleSelectedCount(rows) {
+  const set = selectedRowSet();
+  return rows.filter((row) => set.has(row.id)).length;
+}
+
+function normalizeTagList(value) {
+  return [...new Set(String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean))];
+}
+
+function applyTagToSelected(tags) {
+  const set = selectedRowSet();
+  if (!set.size || !tags.length) return;
+  state.candidates.forEach((candidate) => {
+    if (!set.has(candidate.id)) return;
+    const merged = new Set([...candidateTags(candidate), ...tags]);
+    candidate.tags = [...merged];
+  });
+}
+
+function applyStageToSelected(stage) {
+  const set = selectedRowSet();
+  if (!set.size || !stage) return;
+  state.candidates.forEach((candidate) => {
+    if (set.has(candidate.id)) candidate.stage = stage;
+  });
+}
+
+function deleteSelectedRows() {
+  const set = selectedRowSet();
+  if (!set.size) return;
+  state.candidates = state.candidates.filter((candidate) => !set.has(candidate.id));
+  state.selectedRows = [];
+  ensureCompareSelection();
+  recomputeAll();
+}
+
+function weightPresets() {
+  return {
+    balanced: { B: 9, C: 7, D: 7, E: 7, F: 5, G: 3, H: 5, I: 3, J: 5, K: 1, L: 7 },
+    conservative: { B: 8, C: 8, D: 8, E: 6, F: 4, G: 4, H: 7, I: 6, J: 6, K: 4, L: 4 },
+    growth: { B: 9, C: 6, D: 5, E: 8, F: 7, G: 7, H: 3, I: 2, J: 4, K: 3, L: 6 },
+  };
+}
+
+function loadWeightPreset(key) {
+  const preset = weightPresets()[key] || weightPresets().balanced;
+  getMetrics().forEach((metric) => {
+    const fallback = state.draftWeights[metric.column] ?? Number(metric.weight) ?? 0;
+    state.draftWeights[metric.column] = preset[metric.column] ?? fallback;
+  });
+  state.weightPreset = key;
+}
+
+function draftWeightsChanged() {
+  return getMetrics().some((metric) => Number(metric.weight) !== Number(state.draftWeights[metric.column] ?? 0));
+}
+
+function previewRankChanges() {
+  if (state.serverMode && Array.isArray(state.weightPreviewData)) return state.weightPreviewData;
+  const draftMap = Object.fromEntries(getMetrics().map((metric) => [metric.column, Number(state.draftWeights[metric.column] ?? 0)]));
+  const currentRanked = [...state.candidates].sort((a, b) => b.computed.total - a.computed.total);
+  const currentRank = new Map(currentRanked.map((candidate, index) => [candidate.id, index + 1]));
+  const draftRanked = state.candidates.map((candidate) => ({
+    candidate,
+    preview: scoringCore.computeScoresWithWeights(candidate, draftMap),
+  })).sort((a, b) => b.preview.total - a.preview.total);
+  const movers = draftRanked.map((entry, index) => {
+    const previous = currentRank.get(entry.candidate.id) || index + 1;
+    return {
+      name: entry.candidate.name,
+      before: previous,
+      after: index + 1,
+      delta: previous - (index + 1),
+      totalDelta: entry.preview.total - entry.candidate.computed.total,
+    };
+  }).filter((entry) => entry.delta !== 0 || Math.abs(entry.totalDelta) > 0.01)
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || Math.abs(b.totalDelta) - Math.abs(a.totalDelta));
+  return movers.slice(0, 5);
+}
+
+async function refreshWeightPreview() {
+  if (!state.serverMode) {
+    state.weightPreviewData = null;
+    renderWeights();
+    return;
+  }
+  try {
+    const preview = await apiJson(WEIGHTS_PREVIEW_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.draftWeights),
+    });
+    state.weightPreviewData = Array.isArray(preview) ? preview.slice(0, 5).map((item) => ({
+      name: item.name,
+      before: item.before,
+      after: item.after,
+      delta: item.movement,
+      totalDelta: 0,
+    })) : null;
+  } catch (error) {
+    console.error(error);
+    state.weightPreviewData = null;
+  }
+  renderWeights();
+}
+
 function renderTable() {
   const rows = visibleCandidates();
   const thead = els.table.querySelector('thead');
   const tbody = els.table.querySelector('tbody');
+  const selection = selectedRowSet();
+  const selectedVisible = visibleSelectedCount(rows);
+  const selectedTotal = state.selectedRows.length;
 
-  thead.innerHTML = '<tr><th>Rank</th><th>Name</th><th>Non-Fin</th><th>Fin</th><th>Total</th><th>Quadrant</th><th>Actions</th></tr>';
+  thead.innerHTML = '<tr><th><input id="tableSelectAll" type="checkbox" /></th><th>Rank</th><th>Name</th><th>Tags</th><th>Stage</th><th>Non-Fin</th><th>Fin</th><th>Total</th><th>Quadrant</th><th>Actions</th></tr>';
   tbody.innerHTML = '';
+  els.selectionStatus.textContent = `${selectedTotal} selected`;
+  els.selectVisibleToggle.checked = rows.length > 0 && selectedVisible === rows.length;
+  els.bulkTagBtn.disabled = selectedTotal === 0;
+  els.bulkStageBtn.disabled = selectedTotal === 0;
+  els.bulkDeleteBtn.disabled = selectedTotal === 0;
 
   rows.forEach((c, i) => {
     const tr = document.createElement('tr');
+
+    const tdCheck = document.createElement('td');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = selection.has(c.id);
+    checkbox.dataset.action = 'toggle-select';
+    checkbox.dataset.id = c.id;
+    tdCheck.appendChild(checkbox);
 
     const tdRank = document.createElement('td');
     tdRank.textContent = String(i + 1);
@@ -1080,6 +1518,27 @@ function renderTable() {
     });
     tdName.appendChild(inp);
 
+    const tdTags = document.createElement('td');
+    const tagInput = document.createElement('input');
+    tagInput.value = candidateTags(c).join(', ');
+    tagInput.placeholder = 'Add tags';
+    tagInput.dataset.action = 'edit-tags';
+    tagInput.dataset.id = c.id;
+    tdTags.appendChild(tagInput);
+
+    const tdStage = document.createElement('td');
+    const stageSelect = document.createElement('select');
+    ['sourcing', 'diligence', 'ic-ready', 'watchlist', 'pass'].forEach((stage) => {
+      const option = document.createElement('option');
+      option.value = stage;
+      option.textContent = stage;
+      stageSelect.appendChild(option);
+    });
+    stageSelect.value = candidateStage(c);
+    stageSelect.dataset.action = 'edit-stage';
+    stageSelect.dataset.id = c.id;
+    tdStage.appendChild(stageSelect);
+
     const tdNF = document.createElement('td'); tdNF.textContent = fmt(c.computed.nonFinancial);
     const tdF = document.createElement('td'); tdF.textContent = fmt(c.computed.financial);
     const tdT = document.createElement('td'); tdT.innerHTML = `<span class="score-chip">${fmt(c.computed.total)}</span>`;
@@ -1090,7 +1549,15 @@ function renderTable() {
     rm.className = 'remove-btn';
     rm.textContent = 'Remove';
     rm.type = 'button';
-    rm.addEventListener('click', () => {
+    rm.addEventListener('click', async () => {
+      if (state.serverMode) {
+        try {
+          await apiJson(`${STARTUPS_URL}/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+        } catch (error) {
+          alert(error.message);
+          return;
+        }
+      }
       state.candidates = state.candidates.filter((x) => x.id !== c.id);
       ensureCompareSelection();
       recomputeAll();
@@ -1099,38 +1566,83 @@ function renderTable() {
     });
     tdA.appendChild(rm);
 
-    tr.append(tdRank, tdName, tdNF, tdF, tdT, tdQ, tdA);
+    tr.append(tdCheck, tdRank, tdName, tdTags, tdStage, tdNF, tdF, tdT, tdQ, tdA);
     tbody.appendChild(tr);
   });
+
+  const headerToggle = document.getElementById('tableSelectAll');
+  if (headerToggle) headerToggle.checked = rows.length > 0 && selectedVisible === rows.length;
 }
 
 function renderWeights() {
   const wrap = els.weightsContainer;
   wrap.innerHTML = '';
-  getMetrics().forEach((m) => {
+  els.presetSelect.value = state.weightPreset;
+  const movers = previewRankChanges();
+  const changed = draftWeightsChanged();
+  const visibleWeightMetrics = getMetrics().filter((metric) => !['J', 'K', 'L'].includes(metric.column));
+
+  visibleWeightMetrics.forEach((m) => {
     const row = document.createElement('div');
     row.className = 'weight-row';
 
     const label = document.createElement('div');
-    label.textContent = `${displayColumn(m.column)} · ${m.label}`;
+    const live = Number(m.weight) || 0;
+    const draft = Number(state.draftWeights[m.column] ?? live);
+    label.innerHTML = `
+      <strong>${escapeHtml(displayColumn(m.column))} · ${escapeHtml(m.label)}</strong>
+      <span class="muted">Live ${escapeHtml(fmt(live, 0))} → Draft ${escapeHtml(fmt(draft, 0))}</span>
+    `;
 
     const inp = document.createElement('input');
     inp.type = 'number';
     inp.step = '0.1';
     inp.min = '0';
-    inp.value = m.weight;
-    inp.addEventListener('input', () => {
-      m.weight = num(inp.value) ?? 0;
-      recomputeAll();
-      save();
-      renderAll();
-    });
+    inp.value = draft;
+    inp.dataset.column = m.column;
+    inp.dataset.action = 'draft-weight';
 
     row.append(label, inp);
     wrap.appendChild(row);
   });
 
-  const rubrics = getRubrics();
+  els.weightPreviewSummary.innerHTML = '';
+  const summary = document.createElement('div');
+  summary.className = 'preview-summary-card';
+  summary.innerHTML = `
+    <div class="decision-item">
+      <strong>Draft status</strong>
+      <span>${changed ? 'Pending changes' : 'No pending changes'}</span>
+    </div>
+    <div class="decision-item">
+      <strong>Preset</strong>
+      <span>${escapeHtml(state.weightPreset)}</span>
+    </div>
+    <div class="decision-item">
+      <strong>Impact</strong>
+      <span>${movers.length ? `${movers.length} ranked movers` : 'No rank movement'}</span>
+    </div>
+  `;
+  els.weightPreviewSummary.appendChild(summary);
+
+  const impact = document.createElement('div');
+  impact.className = 'impact-list';
+  if (!movers.length) {
+    impact.innerHTML = '<p class="muted">Applying this draft does not change current ranking order.</p>';
+  } else {
+    movers.forEach((mover) => {
+      const item = document.createElement('div');
+      item.className = 'impact-item';
+      item.innerHTML = `
+        <strong>${escapeHtml(mover.name)}</strong>
+        <span>${escapeHtml(`#${mover.before} → #${mover.after}`)} · ${escapeHtml(mover.totalDelta >= 0 ? '+' : '')}${escapeHtml(fmt(mover.totalDelta))} total</span>
+      `;
+      impact.appendChild(item);
+    });
+  }
+  els.weightPreviewSummary.appendChild(impact);
+
+  const rubrics = getRubrics().filter((rubric) => !['J', 'K', 'L'].includes(rubric.column));
   const current = els.rubricMetric.value || rubrics[0]?.column;
   els.rubricMetric.innerHTML = '';
   rubrics.forEach((r) => {
@@ -1148,14 +1660,19 @@ function renderControls() {
   setPane(state.activePane);
 
   els.scatterControls.hidden = !state.scatterControlsOpen;
+  els.scatterControls.setAttribute('aria-hidden', String(!state.scatterControlsOpen));
   els.toggleScatterControls.textContent = state.scatterControlsOpen ? 'Hide Controls' : 'Scatter Controls';
+  els.toggleScatterControls.setAttribute('aria-expanded', String(state.scatterControlsOpen));
   els.nfInput.value = Number(state.thresholds.nf ?? 0);
   els.fInput.value = Number(state.thresholds.f ?? 0);
+  if (els.focusTopNearToggle) els.focusTopNearToggle.checked = state.scatterFocusTopNear;
   els.labelMode.value = state.labelMode;
 
   els.searchInput.value = state.search;
   els.sortSelect.value = state.sort;
   els.quadrantSelect.value = state.quadrant;
+  els.savedViewSelect.value = state.savedView;
+  els.presetSelect.value = state.weightPreset;
 }
 
 function renderAll() {
@@ -1165,6 +1682,7 @@ function renderAll() {
   renderDistribution();
   renderQuadrantPieChart();
   renderRankingContributionChart();
+  renderOpportunityChart();
   renderCompare();
   renderNewForm();
   renderTable();
@@ -1198,17 +1716,23 @@ function attachEvents() {
   });
 
   els.useAvg.addEventListener('click', () => {
-    state.thresholds.nf = Math.round(avg(state.candidates.map((c) => c.computed.nonFinancial)));
-    state.thresholds.f = Math.round(avg(state.candidates.map((c) => c.computed.financial)));
+    state.thresholds.nf = Math.round(scoringCore.average(state.candidates.map((c) => c.computed.nonFinancial)));
+    state.thresholds.f = Math.round(scoringCore.average(state.candidates.map((c) => c.computed.financial)));
     save();
     renderAll();
   });
 
   els.useMedian.addEventListener('click', () => {
-    state.thresholds.nf = Math.round(median(state.candidates.map((c) => c.computed.nonFinancial)));
-    state.thresholds.f = Math.round(median(state.candidates.map((c) => c.computed.financial)));
+    state.thresholds.nf = Math.round(scoringCore.median(state.candidates.map((c) => c.computed.nonFinancial)));
+    state.thresholds.f = Math.round(scoringCore.median(state.candidates.map((c) => c.computed.financial)));
     save();
     renderAll();
+  });
+
+  els.focusTopNearToggle?.addEventListener('change', () => {
+    state.scatterFocusTopNear = els.focusTopNearToggle.checked;
+    save();
+    renderScatter();
   });
 
   els.labelMode.addEventListener('change', () => {
@@ -1315,6 +1839,126 @@ function attachEvents() {
     renderRanking();
   });
 
+  els.savedViewSelect.addEventListener('change', () => {
+    state.savedView = els.savedViewSelect.value;
+    state.selectedRows = [];
+    save();
+    renderTable();
+    renderScatter();
+    renderRanking();
+    renderDistribution();
+    renderQuadrantPieChart();
+    renderRankingContributionChart();
+    renderOpportunityChart();
+  });
+
+  els.selectVisibleToggle.addEventListener('change', () => {
+    const rows = visibleCandidates();
+    if (els.selectVisibleToggle.checked) state.selectedRows = rows.map((row) => row.id);
+    else state.selectedRows = [];
+    save();
+    renderTable();
+  });
+
+  els.bulkTagBtn.addEventListener('click', () => {
+    const tags = normalizeTagList(els.bulkTagInput.value);
+    applyTagToSelected(tags);
+    els.bulkTagInput.value = '';
+    save();
+    renderTable();
+  });
+
+  els.bulkStageBtn.addEventListener('click', () => {
+    applyStageToSelected(els.bulkStageSelect.value);
+    els.bulkStageSelect.value = '';
+    save();
+    renderTable();
+  });
+
+  els.bulkDeleteBtn.addEventListener('click', async () => {
+    if (state.serverMode) {
+      try {
+        await Promise.all(state.selectedRows.map((id) => apiJson(`${STARTUPS_URL}/${encodeURIComponent(id)}`, { method: 'DELETE' })));
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+    }
+    deleteSelectedRows();
+    save();
+    renderAll();
+  });
+
+  els.table.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    if (target.id === 'tableSelectAll' && target instanceof HTMLInputElement) {
+      const rows = visibleCandidates();
+      state.selectedRows = target.checked ? rows.map((row) => row.id) : [];
+      save();
+      renderTable();
+      return;
+    }
+
+    if (target.dataset.action === 'toggle-select' && target instanceof HTMLInputElement) {
+      const set = selectedRowSet();
+      if (target.checked) set.add(target.dataset.id);
+      else set.delete(target.dataset.id);
+      state.selectedRows = [...set];
+      save();
+      renderTable();
+      return;
+    }
+
+    if (target.dataset.action === 'edit-stage' && target instanceof HTMLSelectElement) {
+      const candidate = getCandidateById(target.dataset.id);
+      if (!candidate) return;
+      candidate.stage = target.value;
+      save();
+      renderTable();
+    }
+  });
+
+  els.table.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action === 'edit-tags' && target instanceof HTMLInputElement) {
+      const candidate = getCandidateById(target.dataset.id);
+      if (!candidate) return;
+      candidate.tags = normalizeTagList(target.value);
+      save();
+    }
+  });
+
+  els.applyPresetBtn.addEventListener('click', () => {
+    loadWeightPreset(els.presetSelect.value);
+    refreshWeightPreview();
+  });
+
+  els.resetDraftWeightsBtn.addEventListener('click', () => {
+    setDraftWeightsFromModel();
+    state.weightPreset = 'balanced';
+    refreshWeightPreview();
+  });
+
+  els.applyWeightsBtn.addEventListener('click', () => {
+    getMetrics().forEach((metric) => {
+      metric.weight = Number(state.draftWeights[metric.column] ?? metric.weight) || 0;
+    });
+    recomputeAll();
+    save();
+    renderAll();
+  });
+
+  els.weightsContainer.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.dataset.action !== 'draft-weight') return;
+    state.draftWeights[target.dataset.column] = num(target.value) ?? 0;
+    refreshWeightPreview();
+  });
+
   els.rubricMetric.addEventListener('change', () => {
     const r = getRubrics().find((x) => x.column === els.rubricMetric.value);
     els.rubricText.textContent = r?.rubric || 'No rubric available.';
@@ -1342,7 +1986,7 @@ function attachEvents() {
     setFeedback('', 'neutral');
   });
 
-  els.createBtn.addEventListener('click', () => {
+  els.createBtn.addEventListener('click', async () => {
     const name = uniqueName(els.newName.value);
     if (!name) {
       setFeedback('Startup name is required.', 'error');
@@ -1367,9 +2011,25 @@ function attachEvents() {
       computedFromExcel: null,
       isNew: true,
       computed: { nonFinancial: 0, financial: 0, total: 0 },
+      tags: [],
+      stage: 'sourcing',
     };
 
-    state.candidates.unshift(candidate);
+    if (state.serverMode) {
+      try {
+        const saved = await apiJson(STARTUPS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(candidate),
+        });
+        state.candidates.unshift({ ...saved, computed: { nonFinancial: 0, financial: 0, total: 0 } });
+      } catch (error) {
+        setFeedback(error.message, 'error');
+        return;
+      }
+    } else {
+      state.candidates.unshift(candidate);
+    }
     recomputeAll();
     ensureCompareSelection();
     els.newName.value = '';
@@ -1389,20 +2049,58 @@ function attachEvents() {
   });
 
   els.resetBtn.addEventListener('click', () => {
-    hydrate(freshSnapshot());
-    state.newDraft = null;
-    save();
-    renderAll();
+    if (!state.serverMode) {
+      hydrate(freshSnapshot());
+      localStorage.removeItem(STORAGE_KEY);
+      state.newDraft = null;
+      saveUi();
+      renderAll();
+      return;
+    }
+    fetch(RESET_URL, { method: 'POST' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Reset failed: ${res.status}`);
+        return res.json();
+      })
+      .then((snapshot) => {
+        localStorage.removeItem(STORAGE_KEY);
+        hydrate({ ...snapshot, ui: {} });
+        state.newDraft = null;
+        renderAll();
+      })
+      .catch((error) => {
+        alert(error.message);
+      });
   });
 
   els.exportBtn.addEventListener('click', () => {
-    const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'vc-scouting-workbench-export.json';
-    a.click();
-    URL.revokeObjectURL(url);
+    if (!state.serverMode) {
+      const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'vc-scouting-workbench-export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    fetch(EXPORT_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
+        return res.json();
+      })
+      .then((snapshot) => {
+        const blob = new Blob([JSON.stringify({ ...snapshot, ui: serializeUi() }, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'vc-scouting-workbench-export.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((error) => {
+        alert(error.message);
+      });
   });
 
   els.importInput.addEventListener('change', async (event) => {
@@ -1412,9 +2110,23 @@ function attachEvents() {
       const text = await file.text();
       const snap = JSON.parse(text);
       if (!snap?.model || !Array.isArray(snap?.candidates)) throw new Error('Invalid JSON format');
-      hydrate(snap);
+      if (!state.serverMode) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ui: snap.ui || serializeUi() }));
+        hydrate(snap);
+        state.newDraft = null;
+        renderAll();
+        return;
+      }
+      const res = await fetch(IMPORT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(snap),
+      });
+      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
+      const saved = await res.json();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ui: snap.ui || serializeUi() }));
+      hydrate({ ...saved, ui: snap.ui || serializeUi() });
       state.newDraft = null;
-      save();
       renderAll();
     } catch (err) {
       alert(`Import failed: ${err.message}`);
@@ -1430,21 +2142,26 @@ function attachEvents() {
     renderDistribution();
     renderQuadrantPieChart();
     renderRankingContributionChart();
+    renderOpportunityChart();
   });
 }
 
 async function init() {
   try {
-    const res = await fetch(DATA_URL);
-    if (!res.ok) throw new Error(`Failed to load data: ${res.status}`);
-    state.original = await res.json();
-
+    const remote = await fetchBootstrapSnapshot();
+    state.original = remote;
     const local = loadSaved();
-    if (local?.model && Array.isArray(local?.candidates)) hydrate(local);
-    else hydrate(freshSnapshot());
+    if (state.serverMode) hydrate({ ...remote, ui: local?.ui || {} });
+    else {
+      const merged = local?.model && Array.isArray(local?.candidates)
+        ? local
+        : { ...remote, ui: local?.ui || {} };
+      hydrate(merged);
+    }
 
     attachEvents();
     renderAll();
+    refreshWeightPreview();
   } catch (err) {
     document.body.innerHTML = `<main style="padding:20px;font-family:Helvetica Neue,Helvetica,Arial,sans-serif">Failed to initialize app: ${escapeHtml(err.message)}</main>`;
     console.error(err);
