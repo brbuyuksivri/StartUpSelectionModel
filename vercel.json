@@ -2,7 +2,7 @@
   "version": 2,
   "functions": {
     "index.js": {
-      "includeFiles": "{index.html,client.js,styles.css,data/**,migration.*.sql,The_VC_Selection_Framework.pdf}",
+      "includeFiles": "{index.html,client.js,styles.css,data/**,migration.*.sql}",
       "maxDuration": 10
     }
   },
