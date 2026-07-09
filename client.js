@@ -5,6 +5,9 @@ const IMPORT_URL = '/api/import';
 const RESET_URL = '/api/reset';
 const SNAPSHOT_URL = '/api/snapshot';
 const STARTUPS_URL = '/api/startups';
+const ANALYTICS_PORTFOLIO_URL = '/api/analytics/portfolio';
+const EVALUATION_JOBS_URL = '/api/evaluation-jobs';
+const EVALUATIONS_URL = '/api/evaluations';
 const WEIGHTS_PREVIEW_URL = '/api/weights/preview';
 const WEIGHTS_APPLY_URL = '/api/weights/apply';
 const STORAGE_KEY = 'vc-scouting-model-ui-v2';
@@ -48,6 +51,15 @@ const els = {
   insightDealflowBalance: document.getElementById('insightDealflowBalance'),
   insightConvictionConcentration: document.getElementById('insightConvictionConcentration'),
   insightOpportunity: document.getElementById('insightOpportunity'),
+  aiStartupSelect: document.getElementById('aiStartupSelect'),
+  aiQueueBtn: document.getElementById('aiQueueBtn'),
+  aiProcessNextBtn: document.getElementById('aiProcessNextBtn'),
+  aiRefreshBtn: document.getElementById('aiRefreshBtn'),
+  aiStatus: document.getElementById('aiStatus'),
+  aiQueueSummary: document.getElementById('aiQueueSummary'),
+  aiLatestEvaluation: document.getElementById('aiLatestEvaluation'),
+  aiJobList: document.getElementById('aiJobList'),
+  aiMetricSlots: document.getElementById('aiMetricSlots'),
 
   compareA: document.getElementById('compareA'),
   compareB: document.getElementById('compareB'),
@@ -121,6 +133,14 @@ const state = {
   persistTimer: null,
   serverMode: true,
   weightPreviewData: null,
+  analytics: null,
+  analyticsKey: '',
+  analyticsTimer: null,
+  evaluationJobs: [],
+  evaluations: [],
+  aiSelectedStartupId: null,
+  aiBusy: false,
+  aiStatusText: '',
 };
 
 function uid() {
@@ -224,6 +244,146 @@ function maxTotals() {
 
 function pointQuality(candidate) {
   return scoringCore.pointQuality(candidate, getMetrics());
+}
+
+function analyticsThresholdKey() {
+  return `${Number(state.thresholds.nf ?? 0)}:${Number(state.thresholds.f ?? 0)}`;
+}
+
+function parseBucketFloor(label) {
+  const match = String(label || '').match(/-?\d+(\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+function bucketIndexForValue(labels, value) {
+  const floors = labels.map(parseBucketFloor).filter((floor) => floor !== null);
+  if (!floors.length) return 0;
+  let index = 0;
+  for (let i = 0; i < floors.length; i += 1) {
+    if (value >= floors[i]) index = i;
+  }
+  return index;
+}
+
+function analyticsQuadrantOf(candidate, thresholds) {
+  const nfTop = candidate.computed.nonFinancial >= Number(thresholds.nf || 0);
+  const fTop = candidate.computed.financial >= Number(thresholds.f || 0);
+  if (nfTop && fTop) return 'invest';
+  if (!nfTop && fTop) return 'watchNonFinancial';
+  if (nfTop && !fTop) return 'watchFinancial';
+  return 'pass';
+}
+
+function buildLocalAnalyticsData() {
+  const candidates = [...state.candidates];
+  if (!candidates.length) {
+    return {
+      generatedAt: new Date().toISOString(),
+      counts: { candidates: 0, aboveTarget: 0, abovePartnerCutoff: 0 },
+      thresholds: { nf: 0, f: 0, totalTarget: 0, partnerCutoff: 0 },
+      summary: { averageTotal: 0, medianTotal: 0, averageNonFinancial: 0, averageFinancial: 0, top3Share: 0 },
+      quadrants: { invest: 0, watchFinancial: 0, watchNonFinancial: 0, pass: 0 },
+      distribution: { labels: [], counts: [] },
+      ranking: [],
+      opportunities: [],
+      insights: {
+        pipelineQuality: 'No startups are loaded yet.',
+        dealflowBalance: 'Quadrant mix is unavailable until startups are loaded.',
+        riskDispersion: 'Risk dispersion becomes available after the first scored startup.',
+        convictionConcentration: 'Conviction concentration is unavailable without a ranked portfolio.',
+        opportunity: 'No opportunity gap data available.',
+      },
+    };
+  }
+
+  const totals = candidates.map((candidate) => candidate.computed.total);
+  const nfValues = candidates.map((candidate) => candidate.computed.nonFinancial);
+  const fValues = candidates.map((candidate) => candidate.computed.financial);
+  const maxTotal = maxTotals();
+  const thresholds = {
+    nf: Number(state.thresholds.nf ?? Math.round(scoringCore.average(nfValues))),
+    f: Number(state.thresholds.f ?? Math.round(scoringCore.average(fValues))),
+    totalTarget: Math.round(maxTotal * 0.7),
+    partnerCutoff: Math.round(maxTotal * 0.82),
+  };
+
+  const quadrants = { invest: 0, watchFinancial: 0, watchNonFinancial: 0, pass: 0 };
+  candidates.forEach((candidate) => {
+    quadrants[analyticsQuadrantOf(candidate, thresholds)] += 1;
+  });
+
+  const bins = 8;
+  const min = Math.min(...totals);
+  const max = Math.max(...totals);
+  const step = Math.max(1, (max - min) / bins);
+  const counts = Array.from({ length: bins }, () => 0);
+  totals.forEach((value) => {
+    const idx = Math.min(bins - 1, Math.floor((value - min) / step));
+    counts[idx] += 1;
+  });
+
+  const ranking = [...candidates]
+    .sort((a, b) => b.computed.total - a.computed.total)
+    .slice(0, 10)
+    .map((candidate, index) => ({
+      rank: index + 1,
+      id: candidate.id,
+      name: candidate.name,
+      total: candidate.computed.total,
+      nonFinancial: candidate.computed.nonFinancial,
+      financial: candidate.computed.financial,
+    }));
+
+  const opportunities = [...candidates]
+    .map((candidate) => ({
+      id: candidate.id,
+      name: candidate.name,
+      gap: Math.max(0, maxTotal - candidate.computed.total),
+    }))
+    .sort((a, b) => b.gap - a.gap)
+    .slice(0, 5);
+
+  const top10Total = ranking.reduce((sum, row) => sum + row.total, 0) || 1;
+  const top3Share = Math.round((ranking.slice(0, 3).reduce((sum, row) => sum + row.total, 0) / top10Total) * 100);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    counts: {
+      candidates: candidates.length,
+      aboveTarget: totals.filter((value) => value >= thresholds.totalTarget).length,
+      abovePartnerCutoff: totals.filter((value) => value >= thresholds.partnerCutoff).length,
+    },
+    thresholds,
+    summary: {
+      averageTotal: Number(scoringCore.average(totals).toFixed(1)),
+      medianTotal: Math.round(scoringCore.median(totals)),
+      averageNonFinancial: Number(scoringCore.average(nfValues).toFixed(1)),
+      averageFinancial: Number(scoringCore.average(fValues).toFixed(1)),
+      top3Share,
+    },
+    quadrants,
+    distribution: {
+      labels: counts.map((_, i) => `${Math.round(min + i * step)}+`),
+      counts,
+    },
+    ranking,
+    opportunities,
+    insights: {
+      pipelineQuality: `${totals.filter((value) => value >= thresholds.totalTarget).length}/${candidates.length} startups are above target, and ${totals.filter((value) => value >= thresholds.partnerCutoff).length}/${candidates.length} exceed partner cutoff.`,
+      dealflowBalance: `${quadrants.invest} startups are in Invest, ${quadrants.watchFinancial + quadrants.watchNonFinancial} are in Watch, and ${quadrants.pass} are in Pass.`,
+      riskDispersion: `${totals.filter((value) => value < thresholds.totalTarget).length} startups remain below target; de-risk those with strong market signal first.`,
+      convictionConcentration: `Top 3 startups account for ${top3Share}% of top-10 conviction score.`,
+      opportunity: opportunities[0]
+        ? `${opportunities[0].name} has the largest weighted upside gap at ${Math.round(opportunities[0].gap)} points.`
+        : 'No opportunity gap data available.',
+    },
+  };
+}
+
+function currentAnalyticsData() {
+  return state.serverMode && state.analytics && state.analyticsKey === analyticsThresholdKey()
+    ? state.analytics
+    : buildLocalAnalyticsData();
 }
 
 function getCandidateById(id) {
@@ -345,11 +505,15 @@ function serializeServerSnapshot() {
       name: c.name,
       normalizedName: c.normalizedName,
       scores: clone(c.scores),
+      externalScores: clone(c.externalScores || {}),
+      aiScores: clone(c.aiScores || {}),
+      aiRationales: clone(c.aiRationales || {}),
       notes: clone(c.notes),
       computedFromExcel: clone(c.computedFromExcel),
       isNew: !!c.isNew,
       tags: clone(candidateTags(c)),
       stage: candidateStage(c),
+      lastAiEvaluationId: c.lastAiEvaluationId || null,
     })),
   };
 }
@@ -370,6 +534,7 @@ function serializeUi() {
     scatterSelectedId: state.scatterSelectedId,
     scatterFocusTopNear: state.scatterFocusTopNear,
     weightPreset: state.weightPreset,
+    aiSelectedStartupId: state.aiSelectedStartupId,
   };
 }
 
@@ -399,6 +564,70 @@ async function apiJson(url, options = {}) {
   const res = await fetch(url, options);
   if (!res.ok) throw new Error(`${options.method || 'GET'} ${url} failed: ${res.status}`);
   return res.json();
+}
+
+async function refreshAnalytics(options = {}) {
+  const { render = true } = options;
+  if (!state.serverMode) {
+    state.analytics = null;
+    state.analyticsKey = analyticsThresholdKey();
+    if (render) renderAnalysisPanels();
+    return null;
+  }
+  const key = analyticsThresholdKey();
+  try {
+    state.analytics = await apiJson(`${ANALYTICS_PORTFOLIO_URL}?nf=${encodeURIComponent(state.thresholds.nf ?? 0)}&f=${encodeURIComponent(state.thresholds.f ?? 0)}`);
+    state.analyticsKey = key;
+  } catch (error) {
+    console.error(error);
+    state.analytics = null;
+    state.analyticsKey = '';
+  }
+  if (render) renderAnalysisPanels();
+  return state.analytics;
+}
+
+function scheduleAnalyticsRefresh() {
+  clearTimeout(state.analyticsTimer);
+  state.analyticsTimer = window.setTimeout(() => {
+    refreshAnalytics().catch(console.error);
+  }, 220);
+}
+
+async function refreshEvaluationWorkflow(options = {}) {
+  const { render = true } = options;
+  if (!state.serverMode) {
+    state.evaluationJobs = [];
+    state.evaluations = [];
+    if (render) renderAiWorkflow();
+    return;
+  }
+  try {
+    const [jobs, evaluations] = await Promise.all([
+      apiJson(EVALUATION_JOBS_URL),
+      apiJson(EVALUATIONS_URL),
+    ]);
+    state.evaluationJobs = Array.isArray(jobs) ? jobs : [];
+    state.evaluations = Array.isArray(evaluations) ? evaluations : [];
+  } catch (error) {
+    console.error(error);
+    state.evaluationJobs = [];
+    state.evaluations = [];
+  }
+  if (render) renderAiWorkflow();
+}
+
+async function refreshRemoteDerivedData(options = {}) {
+  const { analytics = true, workflow = true, render = true } = options;
+  if (!state.serverMode) {
+    if (render) renderAnalysisPanels();
+    return;
+  }
+  await Promise.all([
+    analytics ? refreshAnalytics({ render: false }) : Promise.resolve(),
+    workflow ? refreshEvaluationWorkflow({ render: false }) : Promise.resolve(),
+  ]);
+  if (render) renderAnalysisPanels();
 }
 
 async function updateStartupRemote(id, patch) {
@@ -436,7 +665,14 @@ function loadSaved() {
 function hydrate(snapshot) {
   state.model = snapshot.model;
   applyMetricNameOverrides(state.model);
-  state.candidates = snapshot.candidates.map((c) => ({ ...c, computed: { nonFinancial: 0, financial: 0, total: 0 } }));
+  state.candidates = snapshot.candidates.map((c) => ({
+    ...c,
+    externalScores: c.externalScores || {},
+    aiScores: c.aiScores || {},
+    aiRationales: c.aiRationales || {},
+    lastAiEvaluationId: c.lastAiEvaluationId || null,
+    computed: { nonFinancial: 0, financial: 0, total: 0 },
+  }));
 
   const ui = snapshot.ui || {};
   state.activePane = ui.activePane || 'analysis';
@@ -453,8 +689,14 @@ function hydrate(snapshot) {
   state.scatterSelectedId = ui.scatterSelectedId || null;
   state.scatterFocusTopNear = Boolean(ui.scatterFocusTopNear);
   state.weightPreset = ui.weightPreset || 'balanced';
+  state.aiSelectedStartupId = ui.aiSelectedStartupId || state.scatterSelectedId || state.compareA;
   state.selectedRows = [];
   state.weightPreviewData = null;
+  state.analytics = null;
+  state.analyticsKey = '';
+  state.evaluationJobs = [];
+  state.evaluations = [];
+  state.aiStatusText = '';
 
   recomputeAll();
   setDraftWeightsFromModel();
@@ -471,11 +713,15 @@ function freshSnapshot() {
       name: c.name,
       normalizedName: c.normalizedName,
       scores: clone(c.scores),
+      externalScores: clone(c.externalScores || {}),
+      aiScores: clone(c.aiScores || {}),
+      aiRationales: clone(c.aiRationales || {}),
       notes: clone(c.notes || {}),
       computedFromExcel: clone(c.computedFromExcel || null),
       isNew: false,
       tags: [],
       stage: 'sourcing',
+      lastAiEvaluationId: c.lastAiEvaluationId || null,
     })),
     ui: {},
   };
@@ -753,55 +999,42 @@ function drawBars(canvas, labels, values, color = '#2f6bff', options = {}) {
 }
 
 function renderRanking() {
-  const rows = [...visibleCandidates()].slice(0, 8);
-  const vals = rows.map((r) => r.computed.total);
-  const portfolioTotals = state.candidates.map((c) => c.computed.total);
-  const med = scoringCore.median(portfolioTotals);
-  const maxTotal = maxTotals();
-  const target = maxTotal * 0.7;
-  const cutoff = maxTotal * 0.82;
-  drawBars(els.rankingCanvas, rows.map((r) => r.name), vals, '#2f6bff', {
+  const analytics = currentAnalyticsData();
+  const rows = analytics.ranking.slice(0, 8);
+  const vals = rows.map((row) => row.total);
+  drawBars(els.rankingCanvas, rows.map((row) => row.name), vals, '#2f6bff', {
     benchmarks: [
-      { label: `Median ${fmt(med)}`, value: med, color: '#64748b' },
-      { label: `Target ${fmt(target)}`, value: target, color: '#2563eb' },
-      { label: `Partner cutoff ${fmt(cutoff)}`, value: cutoff, color: '#059669' },
+      { label: `Median ${fmt(analytics.summary.medianTotal)}`, value: analytics.summary.medianTotal, color: '#64748b' },
+      { label: `Target ${fmt(analytics.thresholds.totalTarget)}`, value: analytics.thresholds.totalTarget, color: '#2563eb' },
+      { label: `Partner cutoff ${fmt(analytics.thresholds.partnerCutoff)}`, value: analytics.thresholds.partnerCutoff, color: '#059669' },
     ],
   });
   if (els.insightPipelineQuality) {
-    const aboveTarget = vals.filter((v) => v >= target).length;
-    const aboveCutoff = vals.filter((v) => v >= cutoff).length;
-    els.insightPipelineQuality.textContent = `${aboveTarget}/${rows.length} top startups are above target, and ${aboveCutoff}/${rows.length} exceed partner cutoff. Focus diligence on startups just below cutoff for fastest IC-ready growth.`;
+    els.insightPipelineQuality.textContent = analytics.insights.pipelineQuality;
   }
 }
 
 function renderDistribution() {
-  const vals = state.candidates.map((c) => c.computed.total);
-  if (!vals.length) return;
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  const bins = 8;
-  const step = Math.max(1, (max - min) / bins);
-  const counts = Array.from({ length: bins }, () => 0);
-  vals.forEach((v) => {
-    const idx = Math.min(bins - 1, Math.floor((v - min) / step));
-    counts[idx] += 1;
-  });
-  const labels = counts.map((_, i) => `${fmt(min + i * step, 0)}+`);
-  const med = scoringCore.median(vals);
-  const maxTotal = maxTotals();
-  const target = maxTotal * 0.7;
-  const cutoff = maxTotal * 0.82;
+  const analytics = currentAnalyticsData();
+  const labels = analytics.distribution.labels || [];
+  const counts = analytics.distribution.counts || [];
+  if (!labels.length || !counts.length) {
+    drawBars(els.distCanvas, [], [], '#00a3a3');
+    if (els.insightRiskDispersion) els.insightRiskDispersion.textContent = analytics.insights.riskDispersion;
+    return;
+  }
+  const medianIndex = bucketIndexForValue(labels, analytics.summary.medianTotal);
+  const targetIndex = bucketIndexForValue(labels, analytics.thresholds.totalTarget);
+  const cutoffIndex = bucketIndexForValue(labels, analytics.thresholds.partnerCutoff);
   drawBars(els.distCanvas, labels, counts, '#00a3a3', {
     benchmarks: [
-      { label: 'Median bucket', value: counts[Math.min(bins - 1, Math.floor((med - min) / step))] || 0, color: '#64748b' },
-      { label: 'Target bucket', value: counts[Math.min(bins - 1, Math.floor((target - min) / step))] || 0, color: '#2563eb' },
-      { label: 'Cutoff bucket', value: counts[Math.min(bins - 1, Math.floor((cutoff - min) / step))] || 0, color: '#059669' },
+      { label: 'Median bucket', value: counts[medianIndex] || 0, color: '#64748b' },
+      { label: 'Target bucket', value: counts[targetIndex] || 0, color: '#2563eb' },
+      { label: 'Cutoff bucket', value: counts[cutoffIndex] || 0, color: '#059669' },
     ],
   });
   if (els.insightRiskDispersion) {
-    const high = vals.filter((v) => v >= cutoff).length;
-    const low = vals.filter((v) => v < target).length;
-    els.insightRiskDispersion.textContent = `${high} startups sit in the high-conviction band, while ${low} remain below target. Risk is concentrated in the lower tail; prioritize de-risking those with strong market signal.`;
+    els.insightRiskDispersion.textContent = analytics.insights.riskDispersion;
   }
 }
 
@@ -811,10 +1044,11 @@ function renderQuadrantPieChart() {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, H);
 
-  const quadrants = ['top-right', 'top-left', 'bottom-right', 'bottom-left'];
-  const labels = ['Top-right', 'Top-left', 'Bottom-right', 'Bottom-left'];
+  const analytics = currentAnalyticsData();
+  const quadrants = ['invest', 'watchNonFinancial', 'watchFinancial', 'pass'];
+  const labels = ['Invest', 'Watch: NF', 'Watch: F', 'Pass'];
   const colors = ['#00a3a3', '#2f6bff', '#13b981', '#94a3b8'];
-  const values = quadrants.map((q) => state.candidates.filter((c) => quadrantOf(c) === q).length);
+  const values = quadrants.map((q) => analytics.quadrants[q] || 0);
   const total = values.reduce((a, b) => a + b, 0) || 1;
 
   const cx = Math.round(W * 0.3);
@@ -863,10 +1097,7 @@ function renderQuadrantPieChart() {
   });
 
   if (els.insightDealflowBalance) {
-    const tr = values[0] || 0;
-    const bl = values[3] || 0;
-    const concentration = Math.round((tr / total) * 100);
-    els.insightDealflowBalance.textContent = `Dealflow is ${concentration}% concentrated in Invest zone, with ${bl} startups in Pass zone. Balance is healthy if Watch zones stay fed by new high-upside candidates.`;
+    els.insightDealflowBalance.textContent = analytics.insights.dealflowBalance;
   }
 }
 
@@ -876,12 +1107,13 @@ function renderRankingContributionChart() {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, W, H);
 
-  const rows = [...state.candidates].sort((a, b) => b.computed.total - a.computed.total).slice(0, 10);
+  const analytics = currentAnalyticsData();
+  const rows = analytics.ranking.slice(0, 10);
   if (!rows.length) return;
-  const total = rows.reduce((s, r) => s + r.computed.total, 0) || 1;
+  const total = rows.reduce((s, r) => s + r.total, 0) || 1;
   let cumulative = 0;
   const cumPct = rows.map((r) => {
-    cumulative += r.computed.total;
+    cumulative += r.total;
     return (cumulative / total) * 100;
   });
 
@@ -889,7 +1121,7 @@ function renderRankingContributionChart() {
   const plot = { x: pad.l, y: pad.t, w: W - pad.l - pad.r, h: H - pad.t - pad.b };
   const lane = plot.w / rows.length;
   const barW = Math.max(12, Math.min(34, lane - 10));
-  const maxTotal = Math.max(...rows.map((r) => r.computed.total), 1);
+  const maxTotal = Math.max(...rows.map((r) => r.total), 1);
 
   ctx.strokeStyle = 'rgba(15,23,42,0.1)';
   for (let i = 0; i <= 4; i++) {
@@ -902,7 +1134,7 @@ function renderRankingContributionChart() {
 
   rows.forEach((r, i) => {
     const cx = plot.x + lane * i + lane / 2;
-    const h = (r.computed.total / maxTotal) * plot.h;
+    const h = (r.total / maxTotal) * plot.h;
     const x = cx - barW / 2;
     const y = plot.y + plot.h - h;
     ctx.fillStyle = '#2f6bff';
@@ -940,19 +1172,14 @@ function renderRankingContributionChart() {
   });
 
   if (els.insightConvictionConcentration) {
-    const top3 = rows.slice(0, 3).reduce((s, r) => s + r.computed.total, 0);
-    const shareTop3 = Math.round((top3 / total) * 100);
-    els.insightConvictionConcentration.textContent = `Top 3 startups account for ${shareTop3}% of top-10 conviction score. This indicates ${shareTop3 > 45 ? 'high' : 'moderate'} concentration risk across your highest-ranked pipeline.`;
+    els.insightConvictionConcentration.textContent = analytics.insights.convictionConcentration;
   }
 }
 
 function renderOpportunityChart() {
   if (!els.opportunityCanvas) return;
-  const maxTotal = maxTotals();
-  const rows = [...state.candidates]
-    .map((c) => ({ ...c, gap: Math.max(0, maxTotal - c.computed.total) }))
-    .sort((a, b) => b.gap - a.gap)
-    .slice(0, 5);
+  const analytics = currentAnalyticsData();
+  const rows = analytics.opportunities || [];
   drawBars(
     els.opportunityCanvas,
     rows.map((r) => r.name),
@@ -965,12 +1192,149 @@ function renderOpportunityChart() {
     },
   );
   if (els.insightOpportunity) {
-    const avgGap = rows.length ? scoringCore.average(rows.map((r) => r.gap)) : 0;
-    const best = rows[0];
-    els.insightOpportunity.textContent = best
-      ? `${best.name} has the largest weighted upside gap (${fmt(best.gap)} points). Closing even 30% of average gap (${fmt(avgGap * 0.3)}) can materially shift ranking outcomes.`
-      : 'No opportunity gap data available.';
+    els.insightOpportunity.textContent = analytics.insights.opportunity;
   }
+}
+
+function renderAiWorkflow() {
+  if (!els.aiStartupSelect) return;
+
+  const sorted = [...state.candidates].sort((a, b) => a.name.localeCompare(b.name));
+  if (!state.aiSelectedStartupId || !sorted.some((candidate) => candidate.id === state.aiSelectedStartupId)) {
+    state.aiSelectedStartupId = state.scatterSelectedId && sorted.some((candidate) => candidate.id === state.scatterSelectedId)
+      ? state.scatterSelectedId
+      : sorted[0]?.id || null;
+  }
+
+  const current = state.aiSelectedStartupId;
+  els.aiStartupSelect.innerHTML = '';
+  sorted.forEach((candidate) => {
+    const option = document.createElement('option');
+    option.value = candidate.id;
+    option.textContent = candidate.name;
+    els.aiStartupSelect.appendChild(option);
+  });
+  if ([...els.aiStartupSelect.options].some((option) => option.value === current)) {
+    els.aiStartupSelect.value = current;
+  }
+
+  const selectedCandidate = getCandidateById(state.aiSelectedStartupId);
+  const queued = state.evaluationJobs.filter((job) => job.status === 'queued').length;
+  const processing = state.evaluationJobs.filter((job) => job.status === 'processing').length;
+  const completed = state.evaluationJobs.filter((job) => job.status === 'completed').length;
+  const failed = state.evaluationJobs.filter((job) => job.status === 'failed').length;
+
+  els.aiQueueBtn.disabled = !state.serverMode || !selectedCandidate || state.aiBusy;
+  els.aiProcessNextBtn.disabled = !state.serverMode || state.aiBusy;
+  els.aiRefreshBtn.disabled = state.aiBusy;
+
+  const defaultStatus = !state.serverMode
+    ? 'AI workflow is available only when the API server is active.'
+    : state.aiBusy
+      ? 'AI workflow is processing.'
+      : selectedCandidate
+        ? `Ready to evaluate ${selectedCandidate.name}. Queue depth: ${queued}.`
+        : 'No startups are available for evaluation.';
+  els.aiStatus.textContent = state.aiStatusText || defaultStatus;
+
+  els.aiQueueSummary.innerHTML = [
+    ['Queued', queued],
+    ['Processing', processing],
+    ['Completed', completed],
+    ['Failed', failed],
+  ].map(([label, value]) => `<div class="kpi"><div class="muted">${escapeHtml(label)}</div><strong>${escapeHtml(String(value))}</strong></div>`).join('');
+
+  const latestEvaluation = state.evaluations.find((evaluation) => evaluation.startupId === state.aiSelectedStartupId);
+  if (!latestEvaluation) {
+    els.aiLatestEvaluation.innerHTML = '<div class="decision-item"><strong>Latest evaluation</strong><span>No completed evaluation for this startup yet.</span></div>';
+  } else {
+    const computed = latestEvaluation.summary?.computed || {};
+    const analysis = latestEvaluation.summary?.analysis || {};
+    els.aiLatestEvaluation.innerHTML = [
+      ['Startup', selectedCandidate?.name || latestEvaluation.startupId],
+      ['Source', latestEvaluation.summary?.source || 'system'],
+      ['Provider', analysis.provider || '—'],
+      ['Model', analysis.model || '—'],
+      ['Generated', latestEvaluation.summary?.generatedAt ? new Date(latestEvaluation.summary.generatedAt).toLocaleString() : '—'],
+      ['Total', fmt(computed.total)],
+      ['Non-Financial', fmt(computed.nonFinancial)],
+      ['Financial', fmt(computed.financial)],
+      ['AI Confidence', analysis.confidence !== undefined ? fmt(Number(analysis.confidence) * 100, 0) + '%' : '—'],
+      ['Summary', analysis.overallSummary || '—'],
+      ['Strengths', Array.isArray(analysis.keyStrengths) && analysis.keyStrengths.length ? analysis.keyStrengths.join(' · ') : '—'],
+      ['Risks', Array.isArray(analysis.keyRisks) && analysis.keyRisks.length ? analysis.keyRisks.join(' · ') : '—'],
+    ].map(([label, value]) => `<div class="decision-item"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(String(value))}</span></div>`).join('');
+  }
+
+  const recentJobs = state.evaluationJobs.slice(0, 6);
+  if (!recentJobs.length) {
+    els.aiJobList.innerHTML = '<p class="muted">No evaluation jobs yet.</p>';
+  } else {
+    els.aiJobList.innerHTML = recentJobs.map((job) => {
+      const candidate = getCandidateById(job.startupId);
+      const status = job.status || 'queued';
+      const meta = job.completedAt || job.startedAt || job.createdAt;
+      return `
+        <div class="job-item">
+          <div>
+            <strong>${escapeHtml(candidate?.name || job.startupId)}</strong>
+            <div class="muted">${escapeHtml(job.requestedBy || 'system')} · ${escapeHtml(meta ? new Date(meta).toLocaleString() : 'pending')}</div>
+          </div>
+          <span class="job-status is-${escapeHtml(status)}">${escapeHtml(status)}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  if (!els.aiMetricSlots) return;
+  if (!selectedCandidate) {
+    els.aiMetricSlots.innerHTML = '<p class="muted">Select a startup to inspect scoring slots.</p>';
+    return;
+  }
+
+  const metrics = getNewStartupMetrics();
+  els.aiMetricSlots.innerHTML = metrics.map((metric) => {
+    const analyst = num(selectedCandidate.scores?.[metric.column]);
+    const external = num(selectedCandidate.externalScores?.[metric.column]);
+    const ai = num(selectedCandidate.aiScores?.[metric.column]);
+    const blended = scoringCore.resolveMetricScore(selectedCandidate, metric.column);
+    const rationale = selectedCandidate.aiRationales?.[metric.column] || '';
+    return `
+      <div class="ai-metric-row">
+        <div class="ai-metric-head">
+          <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
+          <span class="muted">Blended: ${escapeHtml(fmt(blended))}</span>
+        </div>
+        <div class="ai-metric-grid">
+          <label>Analyst
+            <div class="slot-readonly">${escapeHtml(fmt(analyst))}</div>
+          </label>
+          <label>External
+            <select data-action="external-score" data-id="${escapeHtml(selectedCandidate.id)}" data-column="${escapeHtml(metric.column)}">
+              ${SCORE_OPTIONS.map((value) => {
+                const selected = (value === '' ? null : value) === external ? ' selected' : '';
+                const text = value === '' ? '—' : String(value);
+                return `<option value="${escapeHtml(String(value))}"${selected}>${escapeHtml(text)}</option>`;
+              }).join('')}
+            </select>
+          </label>
+          <label>AI
+            <div class="slot-readonly">${escapeHtml(fmt(ai))}</div>
+          </label>
+        </div>
+        ${rationale ? `<p class="chart-insight">${escapeHtml(rationale)}</p>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function renderAnalysisPanels() {
+  renderRanking();
+  renderDistribution();
+  renderQuadrantPieChart();
+  renderRankingContributionChart();
+  renderOpportunityChart();
+  renderAiWorkflow();
 }
 
 function ensureCompareSelection() {
@@ -1003,8 +1367,8 @@ function renderCompare() {
   const b = state.candidates.find((c) => c.id === state.compareB);
   if (!a || !b) return;
 
-  const winsA = compareMetrics.filter((m) => (num(a.scores[m.column]) ?? 0) > (num(b.scores[m.column]) ?? 0)).length;
-  const winsB = compareMetrics.filter((m) => (num(b.scores[m.column]) ?? 0) > (num(a.scores[m.column]) ?? 0)).length;
+  const winsA = compareMetrics.filter((m) => (scoringCore.resolveMetricScore(a, m.column) ?? 0) > (scoringCore.resolveMetricScore(b, m.column) ?? 0)).length;
+  const winsB = compareMetrics.filter((m) => (scoringCore.resolveMetricScore(b, m.column) ?? 0) > (scoringCore.resolveMetricScore(a, m.column) ?? 0)).length;
   const ties = compareMetrics.length - winsA - winsB;
   const cards = [
     ['A Total', fmt(a.computed.total)],
@@ -1017,8 +1381,8 @@ function renderCompare() {
   els.compareSummary.innerHTML = cards.map(([k, v]) => `<div class="kpi"><div class="muted">${escapeHtml(k)}</div><strong>${escapeHtml(String(v))}</strong></div>`).join('');
 
   const deltas = compareMetrics.map((m) => {
-    const wa = (num(a.scores[m.column]) ?? 0) * (Number(m.weight) || 0);
-    const wb = (num(b.scores[m.column]) ?? 0) * (Number(m.weight) || 0);
+    const wa = (scoringCore.resolveMetricScore(a, m.column) ?? 0) * (Number(m.weight) || 0);
+    const wb = (scoringCore.resolveMetricScore(b, m.column) ?? 0) * (Number(m.weight) || 0);
     return { label: m.label, delta: wa - wb };
   });
   const strengths = [...deltas].sort((x, y) => y.delta - x.delta).slice(0, 3).filter((d) => d.delta > 0);
@@ -1050,11 +1414,11 @@ function renderCompare() {
     column: m.column,
   }));
   const valsA = metrics.map((m) => {
-    const s = num(a.scores[m.column]) ?? 0;
+    const s = scoringCore.resolveMetricScore(a, m.column) ?? 0;
     return state.compareMode === 'weighted' ? s * (Number(m.weight) || 0) : s;
   });
   const valsB = metrics.map((m) => {
-    const s = num(b.scores[m.column]) ?? 0;
+    const s = scoringCore.resolveMetricScore(b, m.column) ?? 0;
     return state.compareMode === 'weighted' ? s * (Number(m.weight) || 0) : s;
   });
 
@@ -1155,6 +1519,8 @@ function scoreSelect(value, onChange) {
 function emptyDraft() {
   return {
     scores: Object.fromEntries(getMetrics().map((m) => [m.column, null])),
+    externalScores: Object.fromEntries(getMetrics().map((m) => [m.column, null])),
+    aiScores: Object.fromEntries(getMetrics().map((m) => [m.column, null])),
     notes: Object.fromEntries(getMetrics().map((m) => [m.column, ''])),
   };
 }
@@ -1177,9 +1543,13 @@ function buildDraftFromSelections() {
   getNewStartupMetrics().forEach((m) => {
     if (cloneC) {
       draft.scores[m.column] = num(cloneC.scores[m.column]) ?? tScores[m.column] ?? null;
+      draft.externalScores[m.column] = num(cloneC.externalScores?.[m.column]) ?? null;
+      draft.aiScores[m.column] = num(cloneC.aiScores?.[m.column]) ?? null;
       draft.notes[m.column] = (cloneC.notes?.[m.column] || '').trim();
     } else {
       draft.scores[m.column] = tScores[m.column] ?? null;
+      draft.externalScores[m.column] = null;
+      draft.aiScores[m.column] = null;
       draft.notes[m.column] = els.newNotesMode.value === 'rubric' ? `Evidence for ${m.label} (why 1-5?)` : '';
     }
   });
@@ -1269,11 +1639,18 @@ function renderNewForm() {
       head.innerHTML = `<span>${escapeHtml(displayColumn(m.column))} · ${escapeHtml(m.label)}</span><span class="muted">Weight: ${escapeHtml(String(m.weight))}</span>`;
 
       const sl = document.createElement('label');
-      sl.textContent = 'Score';
+      sl.textContent = 'Analyst Score';
       const select = scoreSelect(state.newDraft.scores[m.column], (v) => { state.newDraft.scores[m.column] = v; });
       select.dataset.metric = m.column;
-      select.dataset.role = 'score';
+      select.dataset.role = 'analyst-score';
       sl.appendChild(select);
+
+      const exl = document.createElement('label');
+      exl.textContent = 'External Score';
+      const externalSelect = scoreSelect(state.newDraft.externalScores[m.column], (v) => { state.newDraft.externalScores[m.column] = v; });
+      externalSelect.dataset.metric = m.column;
+      externalSelect.dataset.role = 'external-score';
+      exl.appendChild(externalSelect);
 
       const nl = document.createElement('label');
       nl.textContent = 'Explanation';
@@ -1286,7 +1663,16 @@ function renderNewForm() {
       ta.addEventListener('input', () => { state.newDraft.notes[m.column] = ta.value; });
       nl.appendChild(ta);
 
-      row.append(head, sl, nl);
+      const ail = document.createElement('label');
+      ail.textContent = 'AI Score';
+      const aiValue = document.createElement('div');
+      aiValue.className = 'slot-readonly';
+      aiValue.textContent = state.newDraft.aiScores[m.column] === null || state.newDraft.aiScores[m.column] === undefined
+        ? 'Pending after AI evaluation'
+        : String(state.newDraft.aiScores[m.column]);
+      ail.appendChild(aiValue);
+
+      row.append(head, sl, exl, ail, nl);
       block.appendChild(row);
     });
 
@@ -1320,7 +1706,7 @@ function validateDraft() {
   for (const m of getNewStartupMetrics()) {
     const s = num(state.newDraft.scores[m.column]);
     const n = (state.newDraft.notes[m.column] || '').trim();
-    if (s === null) return { ok: false, message: `Missing score for ${displayColumn(m.column)}.`, metric: m.column, role: 'score' };
+    if (s === null) return { ok: false, message: `Missing score for ${displayColumn(m.column)}.`, metric: m.column, role: 'analyst-score' };
     if (!n) return { ok: false, message: `Missing explanation for ${displayColumn(m.column)}.`, metric: m.column, role: 'note' };
   }
   return { ok: true };
@@ -1581,6 +1967,7 @@ function renderTable() {
       recomputeAll();
       save();
       renderAll();
+      refreshRemoteDerivedData({ workflow: true }).catch(console.error);
     });
     tdA.appendChild(rm);
 
@@ -1696,11 +2083,7 @@ function renderControls() {
 function renderAll() {
   renderControls();
   renderScatter();
-  renderRanking();
-  renderDistribution();
-  renderQuadrantPieChart();
-  renderRankingContributionChart();
-  renderOpportunityChart();
+  renderAnalysisPanels();
   renderCompare();
   renderNewForm();
   renderTable();
@@ -1726,11 +2109,13 @@ function attachEvents() {
     state.thresholds.nf = num(els.nfInput.value) ?? 0;
     save();
     renderAll();
+    scheduleAnalyticsRefresh();
   });
   els.fInput.addEventListener('input', () => {
     state.thresholds.f = num(els.fInput.value) ?? 0;
     save();
     renderAll();
+    scheduleAnalyticsRefresh();
   });
 
   els.useAvg.addEventListener('click', () => {
@@ -1738,6 +2123,7 @@ function attachEvents() {
     state.thresholds.f = Math.round(scoringCore.average(state.candidates.map((c) => c.computed.financial)));
     save();
     renderAll();
+    scheduleAnalyticsRefresh();
   });
 
   els.useMedian.addEventListener('click', () => {
@@ -1745,6 +2131,7 @@ function attachEvents() {
     state.thresholds.f = Math.round(scoringCore.median(state.candidates.map((c) => c.computed.financial)));
     save();
     renderAll();
+    scheduleAnalyticsRefresh();
   });
 
   els.focusTopNearToggle?.addEventListener('change', () => {
@@ -1788,7 +2175,9 @@ function attachEvents() {
     const nearest = findNearestScatterPoint(pos.x, pos.y);
     if (!nearest) return;
     state.scatterSelectedId = state.scatterSelectedId === nearest.id ? null : nearest.id;
+    state.aiSelectedStartupId = state.scatterSelectedId || state.aiSelectedStartupId;
     renderScatter();
+    renderAiWorkflow();
     save();
   });
 
@@ -1804,6 +2193,7 @@ function attachEvents() {
     state.thresholds.f = Math.max(0, Math.round(f));
     save();
     renderAll();
+    scheduleAnalyticsRefresh();
   });
 
   els.compareA.addEventListener('change', () => {
@@ -1826,6 +2216,84 @@ function attachEvents() {
     renderCompare();
   });
 
+  els.aiStartupSelect?.addEventListener('change', () => {
+    state.aiSelectedStartupId = els.aiStartupSelect.value || null;
+    state.aiStatusText = '';
+    save();
+    renderAiWorkflow();
+  });
+
+  els.aiQueueBtn?.addEventListener('click', async () => {
+    if (!state.serverMode || !state.aiSelectedStartupId) return;
+    state.aiBusy = true;
+    renderAiWorkflow();
+    try {
+      await apiJson(EVALUATION_JOBS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startupId: state.aiSelectedStartupId,
+          requestedBy: 'frontend-ui',
+          payload: { trigger: 'manual-queue' },
+        }),
+      });
+      await refreshEvaluationWorkflow();
+      state.aiStatusText = 'Evaluation job queued successfully.';
+    } catch (error) {
+      console.error(error);
+      state.aiStatusText = error.message;
+    } finally {
+      state.aiBusy = false;
+      renderAiWorkflow();
+    }
+  });
+
+  els.aiProcessNextBtn?.addEventListener('click', async () => {
+    if (!state.serverMode) return;
+    state.aiBusy = true;
+    renderAiWorkflow();
+    try {
+      const result = await apiJson(`${EVALUATION_JOBS_URL}/process-next`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (result?.startup?.id) {
+        const current = getCandidateById(result.startup.id);
+        if (current) Object.assign(current, result.startup);
+        recomputeAll();
+      }
+      await refreshEvaluationWorkflow();
+      await refreshAnalytics({ render: false });
+      if (result?.evaluation?.startupId) {
+        state.aiSelectedStartupId = result.evaluation.startupId;
+        state.aiStatusText = `Processed evaluation job for ${getCandidateById(result.evaluation.startupId)?.name || result.evaluation.startupId}.`;
+      } else {
+        state.aiStatusText = 'No queued evaluation job was available.';
+      }
+    } catch (error) {
+      console.error(error);
+      state.aiStatusText = error.message;
+    } finally {
+      state.aiBusy = false;
+      renderAll();
+    }
+  });
+
+  els.aiRefreshBtn?.addEventListener('click', async () => {
+    state.aiBusy = true;
+    renderAiWorkflow();
+    try {
+      await refreshRemoteDerivedData();
+      state.aiStatusText = 'Analytics and AI workflow refreshed.';
+    } catch (error) {
+      console.error(error);
+      state.aiStatusText = error.message;
+    } finally {
+      state.aiBusy = false;
+      renderAiWorkflow();
+    }
+  });
+
   els.swapBtn.addEventListener('click', () => {
     const a = state.compareA;
     state.compareA = state.compareB;
@@ -1846,7 +2314,7 @@ function attachEvents() {
     save();
     renderTable();
     renderScatter();
-    renderRanking();
+    renderAnalysisPanels();
   });
 
   els.quadrantSelect.addEventListener('change', () => {
@@ -1854,7 +2322,7 @@ function attachEvents() {
     save();
     renderTable();
     renderScatter();
-    renderRanking();
+    renderAnalysisPanels();
   });
 
   els.savedViewSelect.addEventListener('change', () => {
@@ -1863,11 +2331,7 @@ function attachEvents() {
     save();
     renderTable();
     renderScatter();
-    renderRanking();
-    renderDistribution();
-    renderQuadrantPieChart();
-    renderRankingContributionChart();
-    renderOpportunityChart();
+    renderAnalysisPanels();
   });
 
   els.selectVisibleToggle.addEventListener('change', () => {
@@ -1926,6 +2390,7 @@ function attachEvents() {
     deleteSelectedRows();
     save();
     renderAll();
+    refreshRemoteDerivedData({ workflow: true }).catch(console.error);
   });
 
   els.table.addEventListener('change', (event) => {
@@ -1997,6 +2462,43 @@ function attachEvents() {
     }
   });
 
+  els.aiMetricSlots?.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) return;
+    if (target.dataset.action !== 'external-score') return;
+    const candidate = getCandidateById(target.dataset.id);
+    if (!candidate) return;
+    const previousScores = clone(candidate.externalScores || {});
+    const nextValue = num(target.value);
+    candidate.externalScores = {
+      ...(candidate.externalScores || {}),
+      [target.dataset.column]: nextValue,
+    };
+
+    const persist = async () => {
+      if (!state.serverMode) return candidate;
+      const saved = await updateStartupRemote(candidate.id, {
+        externalScores: candidate.externalScores,
+      });
+      Object.assign(candidate, saved);
+      return candidate;
+    };
+
+    persist()
+      .then(() => {
+        recomputeAll();
+        save();
+        renderAll();
+        refreshAnalytics({ render: false }).then(() => renderAnalysisPanels()).catch(console.error);
+      })
+      .catch((error) => {
+        candidate.externalScores = previousScores;
+        alert(error.message);
+        recomputeAll();
+        renderAll();
+      });
+  });
+
   els.applyPresetBtn.addEventListener('click', () => {
     loadWeightPreset(els.presetSelect.value);
     refreshWeightPreview();
@@ -2033,6 +2535,7 @@ function attachEvents() {
     state.weightPreviewData = null;
     save();
     renderAll();
+    refreshRemoteDerivedData({ workflow: false }).catch(console.error);
   });
 
   els.weightsContainer.addEventListener('input', (event) => {
@@ -2091,12 +2594,16 @@ function attachEvents() {
       name,
       normalizedName: '',
       scores: clone(state.newDraft.scores),
+      externalScores: clone(state.newDraft.externalScores),
+      aiScores: clone(state.newDraft.aiScores),
+      aiRationales: {},
       notes: Object.fromEntries(Object.entries(state.newDraft.notes).map(([k, vv]) => [k, (vv || '').trim()])),
       computedFromExcel: null,
       isNew: true,
       computed: { nonFinancial: 0, financial: 0, total: 0 },
       tags: [],
       stage: 'sourcing',
+      lastAiEvaluationId: null,
     };
 
     if (state.serverMode) {
@@ -2107,12 +2614,14 @@ function attachEvents() {
           body: JSON.stringify(candidate),
         });
         state.candidates.unshift({ ...saved, computed: { nonFinancial: 0, financial: 0, total: 0 } });
+        state.aiSelectedStartupId = saved.id;
       } catch (error) {
         setFeedback(error.message, 'error');
         return;
       }
     } else {
       state.candidates.unshift(candidate);
+      state.aiSelectedStartupId = candidate.id;
     }
     recomputeAll();
     ensureCompareSelection();
@@ -2123,6 +2632,7 @@ function attachEvents() {
     save();
     renderAll();
     setFeedback(`Created "${name}".`, 'success');
+    refreshRemoteDerivedData({ workflow: true }).catch(console.error);
   });
 
   els.newName.addEventListener('keydown', (e) => {
@@ -2139,6 +2649,7 @@ function attachEvents() {
       state.newDraft = null;
       saveUi();
       renderAll();
+      refreshRemoteDerivedData().catch(console.error);
       return;
     }
     fetch(RESET_URL, { method: 'POST' })
@@ -2151,6 +2662,7 @@ function attachEvents() {
         hydrate({ ...snapshot, ui: {} });
         state.newDraft = null;
         renderAll();
+        refreshRemoteDerivedData().catch(console.error);
       })
       .catch((error) => {
         alert(error.message);
@@ -2199,6 +2711,7 @@ function attachEvents() {
         hydrate(snap);
         state.newDraft = null;
         renderAll();
+        refreshRemoteDerivedData().catch(console.error);
         return;
       }
       const res = await fetch(IMPORT_URL, {
@@ -2212,6 +2725,7 @@ function attachEvents() {
       hydrate({ ...saved, ui: snap.ui || serializeUi() });
       state.newDraft = null;
       renderAll();
+      refreshRemoteDerivedData().catch(console.error);
     } catch (err) {
       alert(`Import failed: ${err.message}`);
     } finally {
@@ -2222,11 +2736,7 @@ function attachEvents() {
   window.addEventListener('resize', () => {
     renderScatter();
     renderCompare();
-    renderRanking();
-    renderDistribution();
-    renderQuadrantPieChart();
-    renderRankingContributionChart();
-    renderOpportunityChart();
+    renderAnalysisPanels();
   });
 }
 
@@ -2246,6 +2756,7 @@ async function init() {
     attachEvents();
     renderAll();
     refreshWeightPreview();
+    refreshRemoteDerivedData().catch(console.error);
   } catch (err) {
     document.body.innerHTML = `<main style="padding:20px;font-family:Helvetica Neue,Helvetica,Arial,sans-serif">Failed to initialize app: ${escapeHtml(err.message)}</main>`;
     console.error(err);

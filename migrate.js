@@ -1,9 +1,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { Pool } = require('pg');
-const { DATABASE_URL, ROOT } = require('./api.config');
+const { DATABASE_CONFIG, HAS_DATABASE_URL, ROOT } = require('./api.config');
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+if (!HAS_DATABASE_URL || !DATABASE_CONFIG) {
+  console.error('DATABASE_URL is not configured');
+  process.exit(1);
+}
+
+const pool = new Pool(DATABASE_CONFIG);
 
 async function run() {
   const client = await pool.connect();

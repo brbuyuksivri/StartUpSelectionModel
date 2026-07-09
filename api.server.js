@@ -8,10 +8,20 @@ function createAppServer() {
 
 async function startServer() {
   const server = createAppServer();
-  server.listen(PORT, HOST, () => {
-    console.log(`VC Scouting server running at http://${HOST}:${PORT}`);
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      if (error?.code === 'EADDRINUSE') {
+        error.message = `Port ${PORT} is already in use on ${HOST}. Stop the existing process or start with a different PORT.`;
+      }
+      reject(error);
+    };
+    server.once('error', onError);
+    server.listen(PORT, HOST, () => {
+      server.removeListener('error', onError);
+      console.log(`VC Scouting server running at http://${HOST}:${PORT}`);
+      resolve(server);
+    });
   });
-  return server;
 }
 
 if (require.main === module) {

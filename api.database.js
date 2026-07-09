@@ -1,10 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { Pool } = require('pg');
-const { DATA_FILE, DATABASE_URL, ROOT } = require('./api.config');
+const { DATA_FILE, DATABASE_CONFIG, HAS_DATABASE_URL, ROOT } = require('./api.config');
 const { computePortfolio } = require('./scoring-core');
 
-const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL }) : null;
+const pool = DATABASE_CONFIG ? new Pool(DATABASE_CONFIG) : null;
 let initPromise = null;
 
 function readSeed() {
@@ -23,11 +23,15 @@ function normalizeCandidate(candidate, index = null) {
     name: candidate.name || 'Unnamed candidate',
     normalizedName: candidate.normalizedName || '',
     scores: candidate.scores || {},
+    externalScores: candidate.externalScores || {},
+    aiScores: candidate.aiScores || {},
+    aiRationales: candidate.aiRationales || {},
     notes: candidate.notes || {},
     computedFromExcel: candidate.computedFromExcel || null,
     isNew: Boolean(candidate.isNew),
     tags: Array.isArray(candidate.tags) ? candidate.tags : [],
     stage: candidate.stage || 'sourcing',
+    lastAiEvaluationId: candidate.lastAiEvaluationId || null,
   };
 }
 
@@ -52,20 +56,25 @@ async function seedDbWithClient(client) {
       const candidate = normalizeCandidate(rawCandidate, index);
       await client.query(`
         INSERT INTO candidates (
-          id, source_index, name, normalized_name, scores_json, notes_json,
-          computed_from_excel_json, is_new, tags_json, stage
-        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9::jsonb,$10)
+          id, source_index, name, normalized_name, scores_json, external_scores_json,
+          ai_scores_json, ai_rationales_json, notes_json,
+          computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
+        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14)
       `, [
         candidate.id,
         candidate.sourceIndex,
         candidate.name,
         candidate.normalizedName,
         JSON.stringify(candidate.scores),
+        JSON.stringify(candidate.externalScores),
+        JSON.stringify(candidate.aiScores),
+        JSON.stringify(candidate.aiRationales),
         JSON.stringify(candidate.notes),
         JSON.stringify(candidate.computedFromExcel),
         candidate.isNew,
         JSON.stringify(candidate.tags),
         candidate.stage,
+        candidate.lastAiEvaluationId,
       ]);
     }
 
@@ -131,7 +140,7 @@ async function runMigrations(client) {
 }
 
 async function initDb() {
-  if (!pool) throw new Error('DATABASE_URL is not configured');
+  if (!HAS_DATABASE_URL || !pool) throw new Error('DATABASE_URL is not configured');
   if (!initPromise) {
     initPromise = (async () => {
       const client = await pool.connect();
@@ -163,8 +172,9 @@ async function readSnapshot() {
   const model = await getConfigValue('model');
   const source = await getConfigValue('source');
   const { rows } = await query(`
-    SELECT id, source_index, name, normalized_name, scores_json, notes_json,
-           computed_from_excel_json, is_new, tags_json, stage
+    SELECT id, source_index, name, normalized_name, scores_json, external_scores_json,
+           ai_scores_json, ai_rationales_json, notes_json,
+           computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
     FROM candidates
     ORDER BY COALESCE(source_index, 999999), name
   `);
@@ -175,11 +185,15 @@ async function readSnapshot() {
     name: row.name,
     normalizedName: row.normalized_name || '',
     scores: row.scores_json || {},
+    externalScores: row.external_scores_json || {},
+    aiScores: row.ai_scores_json || {},
+    aiRationales: row.ai_rationales_json || {},
     notes: row.notes_json || {},
     computedFromExcel: row.computed_from_excel_json || null,
     isNew: Boolean(row.is_new),
     tags: row.tags_json || [],
     stage: row.stage || 'sourcing',
+    lastAiEvaluationId: row.last_ai_evaluation_id || null,
   }));
 
   return {
@@ -201,20 +215,25 @@ async function saveSnapshot(snapshot) {
       const candidate = normalizeCandidate(rawCandidate, index);
       await client.query(`
         INSERT INTO candidates (
-          id, source_index, name, normalized_name, scores_json, notes_json,
-          computed_from_excel_json, is_new, tags_json, stage
-        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9::jsonb,$10)
+          id, source_index, name, normalized_name, scores_json, external_scores_json,
+          ai_scores_json, ai_rationales_json, notes_json,
+          computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
+        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14)
       `, [
         candidate.id,
         candidate.sourceIndex,
         candidate.name,
         candidate.normalizedName,
         JSON.stringify(candidate.scores),
+        JSON.stringify(candidate.externalScores),
+        JSON.stringify(candidate.aiScores),
+        JSON.stringify(candidate.aiRationales),
         JSON.stringify(candidate.notes),
         JSON.stringify(candidate.computedFromExcel),
         candidate.isNew,
         JSON.stringify(candidate.tags),
         candidate.stage,
+        candidate.lastAiEvaluationId,
       ]);
     }
     await client.query(`
@@ -248,38 +267,48 @@ async function saveCandidate(candidate) {
   const normalized = normalizeCandidate(candidate);
   await query(`
     INSERT INTO candidates (
-      id, source_index, name, normalized_name, scores_json, notes_json,
-      computed_from_excel_json, is_new, tags_json, stage
-    ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,$9::jsonb,$10)
+      id, source_index, name, normalized_name, scores_json, external_scores_json,
+      ai_scores_json, ai_rationales_json, notes_json,
+      computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
+    ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14)
     ON CONFLICT (id) DO UPDATE SET
       source_index = EXCLUDED.source_index,
       name = EXCLUDED.name,
       normalized_name = EXCLUDED.normalized_name,
       scores_json = EXCLUDED.scores_json,
+      external_scores_json = EXCLUDED.external_scores_json,
+      ai_scores_json = EXCLUDED.ai_scores_json,
+      ai_rationales_json = EXCLUDED.ai_rationales_json,
       notes_json = EXCLUDED.notes_json,
       computed_from_excel_json = EXCLUDED.computed_from_excel_json,
       is_new = EXCLUDED.is_new,
       tags_json = EXCLUDED.tags_json,
-      stage = EXCLUDED.stage
+      stage = EXCLUDED.stage,
+      last_ai_evaluation_id = EXCLUDED.last_ai_evaluation_id
   `, [
     normalized.id,
     normalized.sourceIndex,
     normalized.name,
     normalized.normalizedName,
     JSON.stringify(normalized.scores),
+    JSON.stringify(normalized.externalScores),
+    JSON.stringify(normalized.aiScores),
+    JSON.stringify(normalized.aiRationales),
     JSON.stringify(normalized.notes),
     JSON.stringify(normalized.computedFromExcel),
     normalized.isNew,
     JSON.stringify(normalized.tags),
     normalized.stage,
+    normalized.lastAiEvaluationId,
   ]);
   return normalized;
 }
 
 async function updateCandidate(id, patch) {
   const { rows } = await query(`
-    SELECT id, source_index, name, normalized_name, scores_json, notes_json,
-           computed_from_excel_json, is_new, tags_json, stage
+    SELECT id, source_index, name, normalized_name, scores_json, external_scores_json,
+           ai_scores_json, ai_rationales_json, notes_json,
+           computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
     FROM candidates
     WHERE id = $1
     LIMIT 1
@@ -292,11 +321,15 @@ async function updateCandidate(id, patch) {
     name: rows[0].name,
     normalizedName: rows[0].normalized_name || '',
     scores: rows[0].scores_json || {},
+    externalScores: rows[0].external_scores_json || {},
+    aiScores: rows[0].ai_scores_json || {},
+    aiRationales: rows[0].ai_rationales_json || {},
     notes: rows[0].notes_json || {},
     computedFromExcel: rows[0].computed_from_excel_json || null,
     isNew: Boolean(rows[0].is_new),
     tags: rows[0].tags_json || [],
     stage: rows[0].stage || 'sourcing',
+    lastAiEvaluationId: rows[0].last_ai_evaluation_id || null,
   };
 
   return saveCandidate({
@@ -378,6 +411,107 @@ async function listEvaluations() {
   }));
 }
 
+async function listEvaluationJobs() {
+  const { rows } = await query(`
+    SELECT id, startup_id, status, payload_json, result_json, error_text, requested_by,
+           created_at, started_at, completed_at, updated_at
+    FROM evaluation_jobs
+    ORDER BY created_at DESC
+  `);
+  return rows.map((row) => ({
+    id: row.id,
+    startupId: row.startup_id,
+    status: row.status,
+    payload: row.payload_json || {},
+    result: row.result_json || null,
+    error: row.error_text || null,
+    requestedBy: row.requested_by,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+async function enqueueEvaluationJob(job) {
+  await query(`
+    INSERT INTO evaluation_jobs (id, startup_id, status, payload_json, requested_by)
+    VALUES ($1, $2, $3, $4::jsonb, $5)
+  `, [
+    job.id,
+    job.startupId,
+    job.status || 'queued',
+    JSON.stringify(job.payload || {}),
+    job.requestedBy || 'system',
+  ]);
+  return job;
+}
+
+async function claimNextEvaluationJob() {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(`
+      SELECT id, startup_id, status, payload_json, requested_by, created_at
+      FROM evaluation_jobs
+      WHERE status = 'queued'
+      ORDER BY created_at ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    `);
+    if (!rows[0]) {
+      await client.query('COMMIT');
+      return null;
+    }
+
+    const row = rows[0];
+    await client.query(`
+      UPDATE evaluation_jobs
+      SET status = 'processing',
+          started_at = NOW(),
+          updated_at = NOW()
+      WHERE id = $1
+    `, [row.id]);
+    await client.query('COMMIT');
+    return {
+      id: row.id,
+      startupId: row.startup_id,
+      status: 'processing',
+      payload: row.payload_json || {},
+      requestedBy: row.requested_by,
+      createdAt: row.created_at,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function completeEvaluationJob(id, result) {
+  await query(`
+    UPDATE evaluation_jobs
+    SET status = 'completed',
+        result_json = $2::jsonb,
+        completed_at = NOW(),
+        updated_at = NOW(),
+        error_text = NULL
+    WHERE id = $1
+  `, [id, JSON.stringify(result || {})]);
+}
+
+async function failEvaluationJob(id, errorMessage) {
+  await query(`
+    UPDATE evaluation_jobs
+    SET status = 'failed',
+        error_text = $2,
+        completed_at = NOW(),
+        updated_at = NOW()
+    WHERE id = $1
+  `, [id, errorMessage || 'Unknown evaluation failure']);
+}
+
 module.exports = {
   pool,
   initDb,
@@ -393,4 +527,9 @@ module.exports = {
   applyWeights,
   saveEvaluation,
   listEvaluations,
+  listEvaluationJobs,
+  enqueueEvaluationJob,
+  claimNextEvaluationJob,
+  completeEvaluationJob,
+  failEvaluationJob,
 };

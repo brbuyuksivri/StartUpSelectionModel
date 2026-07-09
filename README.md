@@ -1,4 +1,4 @@
-# VC VC Scouting Web App
+# VC Scouting Web App
 
 A web app that reproduces the scoring behavior of `VC_Scouting.xlsx`, exposes the internal metric notes/rubrics in an easier UI, and now persists app data through a PostgreSQL-backed API layer that can run locally or through Vercel serverless routes.
 
@@ -13,6 +13,9 @@ A web app that reproduces the scoring behavior of `VC_Scouting.xlsx`, exposes th
 - Persists model and candidate data in PostgreSQL through a local API server
 - Keeps only UI preferences in the browser (`localStorage`)
 - Supports JSON import/export for scenario sharing
+- Exposes portfolio analytics and async evaluation job APIs for future AI workflows
+- Supports multi-source scoring per metric: analyst, external user, and AI-derived score
+- Runs OpenAI-backed startup note evaluation through the async job queue when configured
 
 ## Files
 
@@ -30,10 +33,15 @@ A web app that reproduces the scoring behavior of `VC_Scouting.xlsx`, exposes th
 - `/scorecards.service.js` - scorecard domain service
 - `/weights.service.js` - weights domain service
 - `/evaluations.service.js` - evaluations domain service
+- `/analytics.service.js` - portfolio analytics service
+- `/evaluation-jobs.service.js` - async evaluation queue service
+- `/ai-evaluator.openai.service.js` - OpenAI-backed metric evaluator
 - `/scoring-core.js` - shared scoring logic for backend/frontend migration
-- `/worker.js` - async worker scaffold
+- `/worker.js` - async evaluation worker
 - `/data/vc_scouting.json` - Extracted workbook data used by the app
 - `/migration.0001_initial.sql` - initial PostgreSQL schema migration
+- `/migration.0002_evaluation_jobs.sql` - evaluation job queue schema
+- `/migration.0003_multisource_scores.sql` - external + AI score slot schema
 - `/migrate.js` - PostgreSQL migration runner
 - `/scripts/extract_vc_scouting.py` - Extracts data from the source Excel (`.xlsx` XML)
 - `/ARCHITECTURE.md` - current modular target and migration notes
@@ -46,6 +54,8 @@ From this folder:
 ```bash
 npm install
 export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/vc_scouting
+export OPENAI_API_KEY=your_openai_api_key
+export OPENAI_MODEL=gpt-4.1-mini
 node migrate.js
 node server.js
 ```
@@ -62,9 +72,12 @@ Set at least:
 
 ```bash
 vercel env add DATABASE_URL
+vercel env add OPENAI_API_KEY
+vercel env add OPENAI_MODEL
 ```
 
 Without `DATABASE_URL`, the frontend can still fall back to the bundled JSON seed, but API-backed persistence endpoints will return a non-crashing `500` JSON error instead of crashing the serverless function.
+Without `OPENAI_API_KEY`, queued AI evaluation jobs will fail with a clear runtime error instead of silently falling back to placeholder scoring.
 
 ## Regenerate data from the Excel file
 

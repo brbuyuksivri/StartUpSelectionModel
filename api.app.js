@@ -4,29 +4,38 @@ const { URL } = require('node:url');
 const {
   ROOT,
   MIME,
-  DATABASE_URL,
+  HAS_DATABASE_URL,
+  OPENAI_MODEL,
 } = require('./api.config');
-  const {
-    initDb,
-    readSnapshot,
-    saveSnapshot,
-    seedDb,
-    listCandidates,
-    saveCandidate,
-    updateCandidate,
-    deleteCandidate,
-    listScorecards,
-    listWeightSets,
-    applyWeights,
-    saveEvaluation,
-    listEvaluations,
-  } = require('./api.database');
+const {
+  initDb,
+  readSnapshot,
+  saveSnapshot,
+  seedDb,
+  listCandidates,
+  saveCandidate,
+  updateCandidate,
+  deleteCandidate,
+  listScorecards,
+  listWeightSets,
+  applyWeights,
+  saveEvaluation,
+  listEvaluations,
+  listEvaluationJobs,
+  enqueueEvaluationJob,
+  claimNextEvaluationJob,
+  completeEvaluationJob,
+  failEvaluationJob,
+} = require('./api.database');
 const { createBootstrapService } = require('./api.bootstrap.service');
 const { createSnapshotService } = require('./api.snapshot.service');
 const { createStartupsService } = require('./startups.service');
 const { createScorecardsService } = require('./scorecards.service');
 const { createWeightsService } = require('./weights.service');
 const { createEvaluationsService } = require('./evaluations.service');
+const { createAnalyticsService } = require('./analytics.service');
+const { createEvaluationJobsService } = require('./evaluation-jobs.service');
+const { createOpenAiEvaluator, hasOpenAiConfig } = require('./ai-evaluator.openai.service');
 
 function json(res, status, body) {
   res.statusCode = status;
@@ -81,13 +90,27 @@ async function getServices() {
   if (!servicesPromise) {
     servicesPromise = (async () => {
       await initDb();
+      const aiEvaluator = createOpenAiEvaluator();
       return {
+        aiEvaluator,
         bootstrapService: createBootstrapService({ readSnapshot }),
         snapshotService: createSnapshotService({ readSnapshot, saveSnapshot, seedDb }),
         startupsService: createStartupsService({ listCandidates, saveCandidate, updateCandidate, deleteCandidate }),
         scorecardsService: createScorecardsService({ listScorecards }),
         weightsService: createWeightsService({ listWeightSets, readSnapshot, applyWeights }),
         evaluationsService: createEvaluationsService({ listEvaluations, readSnapshot, saveEvaluation }),
+        analyticsService: createAnalyticsService({ readSnapshot }),
+        evaluationJobsService: createEvaluationJobsService({
+          readSnapshot,
+          saveCandidate,
+          saveEvaluation,
+          listEvaluationJobs,
+          enqueueEvaluationJob,
+          claimNextEvaluationJob,
+          completeEvaluationJob,
+          failEvaluationJob,
+          aiEvaluator,
+        }),
       };
     })().catch((error) => {
       servicesPromise = null;
@@ -104,7 +127,7 @@ function isApiPath(pathname) {
 function internalErrorBody(error) {
   const message = error?.message || 'Internal server error';
   const details = [];
-  if (!DATABASE_URL) details.push('DATABASE_URL is not configured.');
+  if (!HAS_DATABASE_URL) details.push('DATABASE_URL is not configured.');
   return {
     error: message,
     details,
@@ -133,10 +156,19 @@ async function handleApiRequest(req, res, options = {}) {
       scorecardsService,
       weightsService,
       evaluationsService,
+      analyticsService,
+      evaluationJobsService,
+      aiEvaluator,
     } = await getServices();
 
     if (req.method === 'GET' && pathname === '/api/health') {
-      json(res, 200, { ok: true, service: 'vc-api', database: Boolean(DATABASE_URL) });
+      json(res, 200, {
+        ok: true,
+        service: 'vc-api',
+        database: HAS_DATABASE_URL,
+        ai: hasOpenAiConfig(),
+        aiModel: aiEvaluator.isConfigured() ? OPENAI_MODEL : null,
+      });
       return;
     }
 
@@ -226,6 +258,33 @@ async function handleApiRequest(req, res, options = {}) {
     if (req.method === 'POST' && pathname === '/api/evaluations/run') {
       const payload = await readBody(req);
       json(res, 200, await evaluationsService.evaluateStartup(payload?.startupId));
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/analytics/portfolio') {
+      json(res, 200, await analyticsService.getPortfolioAnalytics({
+        nf: url.searchParams.get('nf'),
+        f: url.searchParams.get('f'),
+      }));
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/evaluation-jobs') {
+      json(res, 200, await evaluationJobsService.list());
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/evaluation-jobs') {
+      const payload = await readBody(req);
+      json(res, 200, await evaluationJobsService.queue(payload?.startupId, {
+        requestedBy: payload?.requestedBy,
+        payload: payload?.payload,
+      }));
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/evaluation-jobs/process-next') {
+      json(res, 200, await evaluationJobsService.processNext());
       return;
     }
 
