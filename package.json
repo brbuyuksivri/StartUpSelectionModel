@@ -13,6 +13,6 @@
     "dev:api": "node api.server.js",
     "dev:worker": "node worker.js",
     "migrate": "node migrate.js",
-    "check": "node --check server.js && node --check api.server.js && node --check api.database.js && node --check startups.service.js && node --check scorecards.service.js && node --check weights.service.js && node --check evaluations.service.js && node --check worker.js && node --check scoring-core.js && node --check migrate.js"
+    "check": "node --check server.js && node --check api.app.js && node --check api.server.js && node --check api.database.js && node --check startups.service.js && node --check scorecards.service.js && node --check weights.service.js && node --check evaluations.service.js && node --check worker.js && node --check scoring-core.js && node --check migrate.js && node --check api/[...route].js && node --check client.js"
   }
 }

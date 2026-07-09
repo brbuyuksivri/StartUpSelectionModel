@@ -1,6 +1,6 @@
 # VC VC Scouting Web App
 
-A web app that reproduces the scoring behavior of `VC_Scouting.xlsx`, exposes the internal metric notes/rubrics in an easier UI, and now persists app data through a PostgreSQL-backed API server.
+A web app that reproduces the scoring behavior of `VC_Scouting.xlsx`, exposes the internal metric notes/rubrics in an easier UI, and now persists app data through a PostgreSQL-backed API layer that can run locally or through Vercel serverless routes.
 
 ## What it does
 
@@ -18,9 +18,11 @@ A web app that reproduces the scoring behavior of `VC_Scouting.xlsx`, exposes th
 
 - `/index.html` - App shell
 - `/styles.css` - UI styling
-- `/app.js` - Scoring engine + interactivity
+- `/client.js` - Scoring engine + interactivity
 - `/server.js` - compatibility entrypoint for the modular API server
+- `/api.app.js` - shared API route handler for local server and Vercel serverless
 - `/api.server.js` - modular HTTP server bootstrap
+- `/api/[...route].js` - Vercel serverless entrypoint for `/api/*`
 - `/api.database.js` - PostgreSQL persistence layer
 - `/api.bootstrap.service.js` - bootstrap snapshot service
 - `/api.snapshot.service.js` - snapshot save/reset/import/export service
@@ -35,6 +37,7 @@ A web app that reproduces the scoring behavior of `VC_Scouting.xlsx`, exposes th
 - `/migrate.js` - PostgreSQL migration runner
 - `/scripts/extract_vc_scouting.py` - Extracts data from the source Excel (`.xlsx` XML)
 - `/ARCHITECTURE.md` - current modular target and migration notes
+- `/vercel.json` - Vercel routing for static frontend + serverless API
 
 ## Run locally
 
@@ -52,6 +55,16 @@ Then open:
 - [http://127.0.0.1:8000](http://127.0.0.1:8000)
 
 The first run expects PostgreSQL to be available through `DATABASE_URL`. Migrations create the schema, and the API seeds the tables from `/data/vc_scouting.json` if the database is empty.
+
+## Deploy on Vercel
+
+Set at least:
+
+```bash
+vercel env add DATABASE_URL
+```
+
+Without `DATABASE_URL`, the frontend can still fall back to the bundled JSON seed, but API-backed persistence endpoints will return a non-crashing `500` JSON error instead of crashing the serverless function.
 
 ## Regenerate data from the Excel file
 

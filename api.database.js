@@ -1,9 +1,11 @@
 const fs = require('node:fs');
+const path = require('node:path');
 const { Pool } = require('pg');
-const { DATA_FILE, DATABASE_URL } = require('./api.config');
+const { DATA_FILE, DATABASE_URL, ROOT } = require('./api.config');
 const { computePortfolio } = require('./scoring-core');
 
-const pool = new Pool({ connectionString: DATABASE_URL });
+const pool = DATABASE_URL ? new Pool({ connectionString: DATABASE_URL }) : null;
+let initPromise = null;
 
 function readSeed() {
   const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -30,6 +32,7 @@ function normalizeCandidate(candidate, index = null) {
 }
 
 async function query(sql, params = []) {
+  if (!pool) throw new Error('DATABASE_URL is not configured');
   return pool.query(sql, params);
 }
 
@@ -38,11 +41,9 @@ async function getConfigValue(key) {
   return rows[0] ? rows[0].value : null;
 }
 
-async function seedDb() {
+async function seedDbWithClient(client) {
   const seed = readSeed();
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['source', JSON.stringify(seed.source || null)]);
     await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['model', JSON.stringify(seed.model)]);
     await client.query('DELETE FROM candidates');
@@ -81,7 +82,17 @@ async function seedDb() {
       ON CONFLICT (id) DO UPDATE
       SET name = EXCLUDED.name, is_active = EXCLUDED.is_active, weights_json = EXCLUDED.weights_json
     `, [JSON.stringify(seed.model.weights || [])]);
+  } catch (error) {
+    throw error;
+  }
+}
 
+async function seedDb() {
+  if (!pool) throw new Error('DATABASE_URL is not configured');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await seedDbWithClient(client);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -91,9 +102,61 @@ async function seedDb() {
   }
 }
 
+async function runMigrations(client) {
+  const files = fs.readdirSync(ROOT)
+    .filter((file) => /^migration\.\d+_.+\.sql$/.test(file))
+    .sort();
+
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS migration_history (
+      name TEXT PRIMARY KEY,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  for (const file of files) {
+    const applied = await client.query('SELECT name FROM migration_history WHERE name = $1', [file]);
+    if (applied.rowCount) continue;
+    const sql = fs.readFileSync(path.join(ROOT, file), 'utf8');
+    await client.query('BEGIN');
+    try {
+      await client.query(sql);
+      await client.query('INSERT INTO migration_history (name) VALUES ($1)', [file]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  }
+}
+
 async function initDb() {
-  const { rows } = await query('SELECT COUNT(*)::int AS count FROM app_config');
-  if (!rows[0]?.count) await seedDb();
+  if (!pool) throw new Error('DATABASE_URL is not configured');
+  if (!initPromise) {
+    initPromise = (async () => {
+      const client = await pool.connect();
+      try {
+        await runMigrations(client);
+        const { rows } = await client.query('SELECT COUNT(*)::int AS count FROM app_config');
+        if (!rows[0]?.count) {
+          await client.query('BEGIN');
+          try {
+            await seedDbWithClient(client);
+            await client.query('COMMIT');
+          } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+          }
+        }
+      } finally {
+        client.release();
+      }
+    })().catch((error) => {
+      initPromise = null;
+      throw error;
+    });
+  }
+  return initPromise;
 }
 
 async function readSnapshot() {
@@ -213,6 +276,36 @@ async function saveCandidate(candidate) {
   return normalized;
 }
 
+async function updateCandidate(id, patch) {
+  const { rows } = await query(`
+    SELECT id, source_index, name, normalized_name, scores_json, notes_json,
+           computed_from_excel_json, is_new, tags_json, stage
+    FROM candidates
+    WHERE id = $1
+    LIMIT 1
+  `, [id]);
+  if (!rows[0]) throw new Error('Startup not found');
+
+  const current = {
+    id: rows[0].id,
+    sourceIndex: rows[0].source_index,
+    name: rows[0].name,
+    normalizedName: rows[0].normalized_name || '',
+    scores: rows[0].scores_json || {},
+    notes: rows[0].notes_json || {},
+    computedFromExcel: rows[0].computed_from_excel_json || null,
+    isNew: Boolean(rows[0].is_new),
+    tags: rows[0].tags_json || [],
+    stage: rows[0].stage || 'sourcing',
+  };
+
+  return saveCandidate({
+    ...current,
+    ...patch,
+    id: current.id,
+  });
+}
+
 async function deleteCandidate(id) {
   await query('DELETE FROM candidates WHERE id = $1', [id]);
 }
@@ -235,6 +328,31 @@ async function listWeightSets() {
     isActive: row.is_active,
     weights: row.weights_json,
   }));
+}
+
+async function applyWeights(draftWeights) {
+  const snapshot = await readSnapshot();
+  const currentWeights = snapshot.model.weights || [];
+  const nextWeights = currentWeights.map((metric) => ({
+    ...metric,
+    weight: Number(draftWeights[metric.column] ?? metric.weight) || 0,
+  }));
+  const nextModel = {
+    ...snapshot.model,
+    weights: nextWeights,
+  };
+
+  await query('UPDATE app_config SET value = $2 WHERE key = $1', ['model', JSON.stringify(nextModel)]);
+  await query(`
+    INSERT INTO weight_sets (id, name, is_active, weights_json)
+    VALUES ('default-weights', 'Default Weights', TRUE, $1::jsonb)
+    ON CONFLICT (id) DO UPDATE
+    SET weights_json = EXCLUDED.weights_json,
+        is_active = EXCLUDED.is_active,
+        updated_at = NOW()
+  `, [JSON.stringify(nextWeights)]);
+
+  return nextWeights;
 }
 
 async function saveEvaluation(evaluation) {
@@ -268,9 +386,11 @@ module.exports = {
   saveSnapshot,
   listCandidates,
   saveCandidate,
+  updateCandidate,
   deleteCandidate,
   listScorecards,
   listWeightSets,
+  applyWeights,
   saveEvaluation,
   listEvaluations,
 };

@@ -6,6 +6,7 @@ const RESET_URL = '/api/reset';
 const SNAPSHOT_URL = '/api/snapshot';
 const STARTUPS_URL = '/api/startups';
 const WEIGHTS_PREVIEW_URL = '/api/weights/preview';
+const WEIGHTS_APPLY_URL = '/api/weights/apply';
 const STORAGE_KEY = 'vc-scouting-model-ui-v2';
 const scoringCore = globalThis.VCScoringCore;
 const SCORE_OPTIONS = ['', 1, 2, 3, 4, 5];
@@ -390,22 +391,22 @@ async function persistServerSnapshot() {
   }
 }
 
-function schedulePersist() {
-  clearTimeout(state.persistTimer);
-  state.persistTimer = setTimeout(() => {
-    persistServerSnapshot();
-  }, 180);
-}
-
 function save() {
   saveUi();
-  if (state.serverMode) schedulePersist();
 }
 
 async function apiJson(url, options = {}) {
   const res = await fetch(url, options);
   if (!res.ok) throw new Error(`${options.method || 'GET'} ${url} failed: ${res.status}`);
   return res.json();
+}
+
+async function updateStartupRemote(id, patch) {
+  return apiJson(`${STARTUPS_URL}/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
 }
 
 async function fetchBootstrapSnapshot() {
@@ -1511,8 +1512,25 @@ function renderTable() {
     const tdName = document.createElement('td');
     const inp = document.createElement('input');
     inp.value = c.name;
-    inp.addEventListener('input', () => {
-      c.name = inp.value;
+    inp.addEventListener('change', async () => {
+      const nextName = uniqueName(inp.value);
+      if (!nextName) {
+        inp.value = c.name;
+        return;
+      }
+      if (state.serverMode) {
+        try {
+          const saved = await updateStartupRemote(c.id, { name: nextName });
+          Object.assign(c, saved);
+        } catch (error) {
+          alert(error.message);
+          inp.value = c.name;
+          return;
+        }
+      } else {
+        c.name = nextName;
+      }
+      recomputeAll();
       save();
       renderAll();
     });
@@ -1860,16 +1878,37 @@ function attachEvents() {
     renderTable();
   });
 
-  els.bulkTagBtn.addEventListener('click', () => {
+  els.bulkTagBtn.addEventListener('click', async () => {
     const tags = normalizeTagList(els.bulkTagInput.value);
+    if (state.serverMode) {
+      try {
+        await Promise.all(state.selectedRows.map((id) => {
+          const candidate = getCandidateById(id);
+          const merged = [...new Set([...(candidate ? candidateTags(candidate) : []), ...tags])];
+          return updateStartupRemote(id, { tags: merged });
+        }));
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+    }
     applyTagToSelected(tags);
     els.bulkTagInput.value = '';
     save();
     renderTable();
   });
 
-  els.bulkStageBtn.addEventListener('click', () => {
-    applyStageToSelected(els.bulkStageSelect.value);
+  els.bulkStageBtn.addEventListener('click', async () => {
+    const nextStage = els.bulkStageSelect.value;
+    if (state.serverMode) {
+      try {
+        await Promise.all(state.selectedRows.map((id) => updateStartupRemote(id, { stage: nextStage })));
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+    }
+    applyStageToSelected(nextStage);
     els.bulkStageSelect.value = '';
     save();
     renderTable();
@@ -1914,19 +1953,46 @@ function attachEvents() {
     if (target.dataset.action === 'edit-stage' && target instanceof HTMLSelectElement) {
       const candidate = getCandidateById(target.dataset.id);
       if (!candidate) return;
+      if (state.serverMode) {
+        updateStartupRemote(target.dataset.id, { stage: target.value })
+          .then((saved) => {
+            Object.assign(candidate, saved);
+            save();
+            renderTable();
+          })
+          .catch((error) => {
+            alert(error.message);
+            target.value = candidateStage(candidate);
+          });
+        return;
+      }
       candidate.stage = target.value;
       save();
       renderTable();
     }
   });
 
-  els.table.addEventListener('input', (event) => {
+  els.table.addEventListener('change', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.dataset.action === 'edit-tags' && target instanceof HTMLInputElement) {
       const candidate = getCandidateById(target.dataset.id);
       if (!candidate) return;
-      candidate.tags = normalizeTagList(target.value);
+      const nextTags = normalizeTagList(target.value);
+      if (state.serverMode) {
+        updateStartupRemote(target.dataset.id, { tags: nextTags })
+          .then((saved) => {
+            Object.assign(candidate, saved);
+            save();
+            renderTable();
+          })
+          .catch((error) => {
+            alert(error.message);
+            target.value = candidateTags(candidate).join(', ');
+          });
+        return;
+      }
+      candidate.tags = nextTags;
       save();
     }
   });
@@ -1942,11 +2008,29 @@ function attachEvents() {
     refreshWeightPreview();
   });
 
-  els.applyWeightsBtn.addEventListener('click', () => {
-    getMetrics().forEach((metric) => {
-      metric.weight = Number(state.draftWeights[metric.column] ?? metric.weight) || 0;
-    });
+  els.applyWeightsBtn.addEventListener('click', async () => {
+    if (state.serverMode) {
+      try {
+        const result = await apiJson(WEIGHTS_APPLY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state.draftWeights),
+        });
+        if (Array.isArray(result.weights)) {
+          state.model.weights = result.weights;
+        }
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+    } else {
+      getMetrics().forEach((metric) => {
+        metric.weight = Number(state.draftWeights[metric.column] ?? metric.weight) || 0;
+      });
+    }
     recomputeAll();
+    setDraftWeightsFromModel();
+    state.weightPreviewData = null;
     save();
     renderAll();
   });
