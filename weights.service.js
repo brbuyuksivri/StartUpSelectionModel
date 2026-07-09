@@ -14,6 +14,13 @@ function createWeightsService(deps) {
       }));
       return scoringCore.previewWeightImpact(snapshot.candidates, currentMetrics, draftMetrics);
     },
+    async apply(draftWeights) {
+      const applied = await deps.applyWeights(draftWeights);
+      return {
+        ok: true,
+        weights: applied,
+      };
+    },
   };
 }
 

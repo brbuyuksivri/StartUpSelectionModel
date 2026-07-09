@@ -1,16 +1,16 @@
 function createSnapshotService(deps) {
   return {
-    saveSnapshot(snapshot) {
+    async saveSnapshot(snapshot) {
       return deps.saveSnapshot(snapshot);
     },
-    resetSnapshot() {
-      deps.seedDb();
+    async resetSnapshot() {
+      await deps.seedDb();
       return deps.readSnapshot();
     },
-    exportSnapshot() {
+    async exportSnapshot() {
       return deps.readSnapshot();
     },
-    importSnapshot(snapshot) {
+    async importSnapshot(snapshot) {
       return deps.saveSnapshot(snapshot);
     },
   };

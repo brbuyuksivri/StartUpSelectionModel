@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "functions": {
+    "index.js": {
+      "includeFiles": "{index.html,client.js,styles.css,data/**,migration.*.sql,The_VC_Selection_Framework.pdf}",
+      "maxDuration": 10
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.js"
+    }
+  ]
+}

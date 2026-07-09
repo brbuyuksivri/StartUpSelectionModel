@@ -29,6 +29,21 @@
     return Object.fromEntries(metrics.map((metric) => [metric.column, Number(metric.weight) || 0]));
   }
 
+  function metricSourceScores(candidate, column) {
+    return {
+      analyst: toNumber(candidate.scores?.[column]),
+      external: toNumber(candidate.externalScores?.[column]),
+      ai: toNumber(candidate.aiScores?.[column]),
+    };
+  }
+
+  function resolveMetricScore(candidate, column) {
+    const sources = metricSourceScores(candidate, column);
+    const values = Object.values(sources).filter((value) => value !== null);
+    if (!values.length) return null;
+    return average(values);
+  }
+
   function metricColumnsByGroup(metrics) {
     return metrics.reduce((groups, metric) => {
       const key = metric.group || 'other';
@@ -43,7 +58,7 @@
     const financialColumns = groups.financial || ['G', 'H', 'I', 'J', 'K'];
     const intuitionColumns = groups.intuition || ['L'];
 
-    const sum = (columns) => columns.reduce((total, column) => total + (toNumber(candidate.scores?.[column]) ?? 0) * (weights[column] ?? 0), 0);
+    const sum = (columns) => columns.reduce((total, column) => total + (resolveMetricScore(candidate, column) ?? 0) * (weights[column] ?? 0), 0);
     const nonFinancial = sum(nonFinancialColumns);
     const financial = sum(financialColumns);
     const intuition = sum(intuitionColumns);
@@ -110,5 +125,7 @@
     previewWeightImpact,
     maxPossibleTotal,
     pointQuality,
+    metricSourceScores,
+    resolveMetricScore,
   };
 });

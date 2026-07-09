@@ -143,6 +143,96 @@ canvas {
   font-size: 13px;
   line-height: 1.4;
 }
+.ai-workflow-card {
+  margin-top: 14px;
+  padding: 14px;
+}
+.ai-workflow-toolbar {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  gap: 10px;
+  align-items: end;
+}
+.ai-workflow-grid {
+  margin-top: 12px;
+}
+.ai-slots-card {
+  margin-top: 12px;
+}
+.ai-metric-slots {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.ai-metric-row {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 10px;
+}
+.ai-metric-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.ai-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.slot-readonly {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 9px 10px;
+  color: #334155;
+  font-weight: 700;
+}
+.ai-job-list {
+  display: grid;
+  gap: 8px;
+}
+.job-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfdff;
+  padding: 10px;
+}
+.job-status {
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: capitalize;
+  background: #eef2ff;
+  color: #3730a3;
+}
+.job-status.is-completed {
+  background: #ecfdf5;
+  color: #065f46;
+}
+.job-status.is-failed {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.job-status.is-processing {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.job-status.is-queued {
+  background: #fff7ed;
+  color: #c2410c;
+}
 .decision-summary {
   margin: 12px 0;
   border: 1px solid var(--line);
@@ -353,6 +443,8 @@ thead th { position: sticky; top: 0; background: #f8fbff; z-index: 1; }
   .bulk-toolbar { grid-template-columns: 1fr 1fr; }
   .weights-preset-row { grid-template-columns: 1fr 1fr; }
   .preview-summary-card { grid-template-columns: 1fr; }
+  .ai-workflow-toolbar { grid-template-columns: 1fr 1fr; }
+  .ai-metric-grid { grid-template-columns: 1fr; }
   #scatterCanvas { height: 500px; }
   #compareCanvas { height: 460px; }
   .compare-heatmap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -365,5 +457,6 @@ thead th { position: sticky; top: 0; background: #f8fbff; z-index: 1; }
   #rankingCanvas, #distCanvas { height: 300px; }
   #quadrantPieCanvas, #rankingContributionCanvas, #opportunityCanvas { height: 280px; }
   .compare-heatmap { grid-template-columns: 1fr; }
+  .ai-workflow-toolbar,
   .bulk-toolbar, .weights-preset-row { grid-template-columns: 1fr; }
 }

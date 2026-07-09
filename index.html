@@ -70,6 +70,40 @@
             <div id="scatterLegend" class="legend"></div>
           </div>
 
+          <div class="card ai-workflow-card">
+            <div class="row between">
+              <div>
+                <h3>AI Evaluation Workflow</h3>
+                <p class="muted">Queue startup reviews, process the next evaluation job, and inspect latest outputs.</p>
+              </div>
+              <button id="aiRefreshBtn" class="ghost" type="button">Refresh Workflow</button>
+            </div>
+            <div class="ai-workflow-toolbar">
+              <label>Startup
+                <select id="aiStartupSelect"></select>
+              </label>
+              <button id="aiQueueBtn" type="button">Queue Review</button>
+              <button id="aiProcessNextBtn" class="ghost" type="button">Process Next Job</button>
+            </div>
+            <p id="aiStatus" class="chart-insight">AI workflow is loading.</p>
+            <div id="aiQueueSummary" class="summary"></div>
+            <div class="grid-2 ai-workflow-grid">
+              <div class="card analytics-card">
+                <h3>Latest Evaluation</h3>
+                <div id="aiLatestEvaluation" class="decision-summary"></div>
+              </div>
+              <div class="card analytics-card">
+                <h3>Recent Jobs</h3>
+                <div id="aiJobList" class="ai-job-list"></div>
+              </div>
+            </div>
+            <div class="card analytics-card ai-slots-card">
+              <h3>External + AI Metric Slots</h3>
+              <p class="muted">External user scores can be entered manually. AI scores are written back by the queued evaluator.</p>
+              <div id="aiMetricSlots" class="ai-metric-slots"></div>
+            </div>
+          </div>
+
           <details class="card collapsible">
             <summary>More Analytics</summary>
             <div class="grid-2">
@@ -273,6 +307,6 @@
   </div>
 
   <script src="./scoring-core.js"></script>
-  <script type="module" src="./app.js?v=20260706-production-arch-1"></script>
+  <script type="module" src="./client.js?v=20260709-production-arch-2"></script>
 </body>
 </html>
