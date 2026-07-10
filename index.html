@@ -70,6 +70,32 @@
             <div id="scatterLegend" class="legend"></div>
           </div>
 
+          <div class="card selected-brief-card">
+            <div class="row between">
+              <div>
+                <h3>Selected Startup Brief</h3>
+                <p class="muted">Click a point on the scatter to inspect investment context and next actions.</p>
+              </div>
+              <div class="row brief-actions">
+                <button id="briefCompareBtn" class="ghost" type="button">Compare to Top</button>
+                <button id="briefPipelineBtn" class="ghost" type="button">Open in Pipeline</button>
+              </div>
+            </div>
+            <div id="selectedStartupBrief" class="selected-brief-empty">
+              Select a startup from the scatter to open its analyst brief.
+            </div>
+          </div>
+
+          <div class="card pipeline-board-card">
+            <div class="row between">
+              <div>
+                <h3>Portfolio Triage Board</h3>
+                <p class="muted">Convert the portfolio into actions: who moves forward, who needs diligence, and where evaluation disagreement is highest.</p>
+              </div>
+            </div>
+            <div id="analysisActionBoard"></div>
+          </div>
+
           <div class="card ai-workflow-card">
             <div class="row between">
               <div>
@@ -167,6 +193,11 @@
               <div id="compareHeatmap" class="compare-heatmap"></div>
             </div>
             <canvas id="compareCanvas" width="980" height="420"></canvas>
+            <div class="card compare-evidence-card">
+              <h3>Metric Evidence Review</h3>
+              <p class="muted">Read score context and analyst notes for both startups side by side.</p>
+              <div id="compareEvidence" class="compare-evidence"></div>
+            </div>
           </div>
         </section>
 
@@ -176,6 +207,18 @@
             <p class="muted">Fill all scores and explanations before create.</p>
           </div>
           <div class="card">
+            <div class="draft-library">
+              <label>Resume Draft
+                <select id="newDraftPicker">
+                  <option value="">No saved drafts</option>
+                </select>
+              </label>
+              <div class="draft-library-actions">
+                <button id="loadDraftBtn" class="ghost" type="button">Load Draft</button>
+                <button id="newDraftBtn" class="ghost" type="button">New Draft</button>
+                <button id="deleteDraftBtn" class="ghost" type="button">Delete Draft</button>
+              </div>
+            </div>
             <div class="grid-2">
               <label>Startup Name <input id="newName" type="text" placeholder="e.g. NovaFlow AI" /></label>
               <label>Template <select id="newTemplate"></select></label>
@@ -189,9 +232,11 @@
             </div>
             <div class="row actions">
               <button id="prefillBtn" class="ghost" type="button">Prefill</button>
+              <button id="saveDraftBtn" class="ghost" type="button">Save Draft</button>
               <button id="clearBtn" class="ghost" type="button">Clear</button>
               <button id="createBtn" type="button">Create Startup</button>
             </div>
+            <div id="newDraftStatus" class="draft-status">Draft not saved yet.</div>
             <p id="newFeedback" class="feedback" data-type="neutral"></p>
             <p class="warn">Required: every metric must have score and explanation.</p>
             <div id="newMetrics" class="metric-form"></div>
@@ -268,6 +313,21 @@
                 <thead></thead>
                 <tbody></tbody>
               </table>
+            </div>
+            <div class="startup-detail-card">
+              <div class="row between">
+                <div>
+                  <h3>Startup Detail</h3>
+                  <p class="muted">Open one startup to review notes, metric rationale, and next actions.</p>
+                </div>
+                <div class="row brief-actions">
+                  <button id="tableDetailCompareBtn" class="ghost" type="button">Compare to Top</button>
+                  <button id="tableDetailQueueBtn" class="ghost" type="button">Queue AI Review</button>
+                </div>
+              </div>
+              <div id="tableDetailPanel" class="selected-brief-empty">
+                Select a startup row to inspect its pipeline detail.
+              </div>
             </div>
           </div>
         </section>

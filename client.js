@@ -5,12 +5,22 @@ const IMPORT_URL = '/api/import';
 const RESET_URL = '/api/reset';
 const SNAPSHOT_URL = '/api/snapshot';
 const STARTUPS_URL = '/api/startups';
+const DRAFTS_URL = '/api/drafts';
 const ANALYTICS_PORTFOLIO_URL = '/api/analytics/portfolio';
 const EVALUATION_JOBS_URL = '/api/evaluation-jobs';
 const EVALUATIONS_URL = '/api/evaluations';
 const WEIGHTS_PREVIEW_URL = '/api/weights/preview';
 const WEIGHTS_APPLY_URL = '/api/weights/apply';
 const STORAGE_KEY = 'vc-scouting-model-ui-v2';
+const NEW_DRAFT_DEFAULTS = Object.freeze({
+  draftId: '',
+  name: '',
+  template: 'balanced',
+  clone: '',
+  notesMode: 'empty',
+  savedAt: null,
+});
+const NEW_STARTUP_DRAFT_PREFIX = 'new-startup:';
 const scoringCore = globalThis.VCScoringCore;
 const SCORE_OPTIONS = ['', 1, 2, 3, 4, 5];
 const METRIC_NAME_LIST = [
@@ -51,6 +61,10 @@ const els = {
   insightDealflowBalance: document.getElementById('insightDealflowBalance'),
   insightConvictionConcentration: document.getElementById('insightConvictionConcentration'),
   insightOpportunity: document.getElementById('insightOpportunity'),
+  selectedStartupBrief: document.getElementById('selectedStartupBrief'),
+  analysisActionBoard: document.getElementById('analysisActionBoard'),
+  briefCompareBtn: document.getElementById('briefCompareBtn'),
+  briefPipelineBtn: document.getElementById('briefPipelineBtn'),
   aiStartupSelect: document.getElementById('aiStartupSelect'),
   aiQueueBtn: document.getElementById('aiQueueBtn'),
   aiProcessNextBtn: document.getElementById('aiProcessNextBtn'),
@@ -69,14 +83,21 @@ const els = {
   decisionSummary: document.getElementById('decisionSummary'),
   compareHeatmap: document.getElementById('compareHeatmap'),
   compareCanvas: document.getElementById('compareCanvas'),
+  compareEvidence: document.getElementById('compareEvidence'),
 
+  newDraftPicker: document.getElementById('newDraftPicker'),
+  loadDraftBtn: document.getElementById('loadDraftBtn'),
+  newDraftBtn: document.getElementById('newDraftBtn'),
+  deleteDraftBtn: document.getElementById('deleteDraftBtn'),
   newName: document.getElementById('newName'),
   newTemplate: document.getElementById('newTemplate'),
   newClone: document.getElementById('newClone'),
   newNotesMode: document.getElementById('newNotesMode'),
   prefillBtn: document.getElementById('prefillBtn'),
+  saveDraftBtn: document.getElementById('saveDraftBtn'),
   clearBtn: document.getElementById('clearBtn'),
   createBtn: document.getElementById('createBtn'),
+  newDraftStatus: document.getElementById('newDraftStatus'),
   newFeedback: document.getElementById('newFeedback'),
   newMetrics: document.getElementById('newMetrics'),
   guideMetric: document.getElementById('guideMetric'),
@@ -94,6 +115,9 @@ const els = {
   bulkStageBtn: document.getElementById('bulkStageBtn'),
   bulkDeleteBtn: document.getElementById('bulkDeleteBtn'),
   table: document.getElementById('table'),
+  tableDetailPanel: document.getElementById('tableDetailPanel'),
+  tableDetailCompareBtn: document.getElementById('tableDetailCompareBtn'),
+  tableDetailQueueBtn: document.getElementById('tableDetailQueueBtn'),
 
   weightsContainer: document.getElementById('weightsContainer'),
   presetSelect: document.getElementById('presetSelect'),
@@ -122,6 +146,7 @@ const state = {
   compareMode: 'raw',
   newDraft: null,
   selectedRows: [],
+  selectedTableStartupId: null,
   draftWeights: {},
   weightPreset: 'balanced',
   scatterPoints: [],
@@ -141,6 +166,9 @@ const state = {
   aiSelectedStartupId: null,
   aiBusy: false,
   aiStatusText: '',
+  newDraftMeta: { ...NEW_DRAFT_DEFAULTS },
+  newDraftPersistTimer: null,
+  newStartupDrafts: [],
 };
 
 function uid() {
@@ -178,6 +206,20 @@ function getRubrics() {
 
 function getNewStartupMetrics() {
   return getMetrics().slice(0, 8);
+}
+
+function newStartupPrompt(metric, index) {
+  const prompts = [
+    'Who are the founders, what have they built before, and what evidence shows execution strength or weakness?',
+    'What is the product today, what problem does it solve, and what proof shows user pull or product clarity?',
+    'What commercial evidence exists today: revenue, pilots, conversion, retention, or repeat demand?',
+    'How does the business model make money, and what evidence supports monetization quality or margin durability?',
+    'Why can this opportunity scale, and what evidence supports market size, expansion, or global reach?',
+    'Who are the key competitors, and what evidence shows defensibility, differentiation, or risk?',
+    'What do the financials say about burn, runway, discipline, and current operating health?',
+    'What credible exit paths exist, and what comparable outcomes or buyer logic support them?',
+  ];
+  return prompts[index] || `What evidence supports the score for ${metric.label}?`;
 }
 
 function setDraftWeightsFromModel() {
@@ -229,6 +271,10 @@ function visibleCandidates() {
   return rows;
 }
 
+function visibleTableMetrics() {
+  return getNewStartupMetrics();
+}
+
 function escapeHtml(s) {
   return String(s)
     .replaceAll('&', '&amp;')
@@ -244,6 +290,131 @@ function maxTotals() {
 
 function pointQuality(candidate) {
   return scoringCore.pointQuality(candidate, getMetrics());
+}
+
+function topCandidateExcluding(excludeId = null) {
+  const ranked = [...state.candidates]
+    .filter((candidate) => candidate.id !== excludeId)
+    .sort((a, b) => b.computed.total - a.computed.total || a.name.localeCompare(b.name));
+  return ranked[0] || null;
+}
+
+function topMetricContributors(candidate, limit = 3) {
+  return visibleTableMetrics()
+    .map((metric) => {
+      const score = scoringCore.resolveMetricScore(candidate, metric.column) ?? 0;
+      const weight = Number(metric.weight) || 0;
+      return {
+        column: metric.column,
+        label: metric.label,
+        score,
+        weight,
+        contribution: score * weight,
+      };
+    })
+    .sort((a, b) => b.contribution - a.contribution)
+    .slice(0, limit);
+}
+
+function fastestImprovementGaps(candidate, limit = 3) {
+  return visibleTableMetrics()
+    .map((metric) => {
+      const score = scoringCore.resolveMetricScore(candidate, metric.column) ?? 0;
+      const weight = Number(metric.weight) || 0;
+      return {
+        column: metric.column,
+        label: metric.label,
+        score,
+        weight,
+        gap: Math.max(0, 5 - score) * weight,
+      };
+    })
+    .filter((metric) => metric.gap > 0)
+    .sort((a, b) => b.gap - a.gap)
+    .slice(0, limit);
+}
+
+function noteCoverageSummary(candidate) {
+  const metrics = visibleTableMetrics();
+  const filled = metrics.filter((metric) => String(candidate.notes?.[metric.column] || '').trim()).length;
+  return { filled, total: metrics.length };
+}
+
+function latestEvaluationFor(startupId) {
+  return state.evaluations.find((evaluation) => evaluation.startupId === startupId) || null;
+}
+
+function decisionBucket(candidate) {
+  const quadrant = quadrantOf(candidate);
+  if (quadrant === 'top-right') return 'invest';
+  if (quadrant === 'top-left') return 'watch-financial';
+  if (quadrant === 'bottom-right') return 'watch-non-financial';
+  return 'pass';
+}
+
+function decisionBucketLabel(bucket) {
+  if (bucket === 'invest') return 'Invest';
+  if (bucket === 'watch-financial') return 'Watch: Financial';
+  if (bucket === 'watch-non-financial') return 'Watch: Non-Financial';
+  return 'Pass';
+}
+
+function nearThresholdDistance(candidate) {
+  const nfGap = Math.abs((candidate.computed?.nonFinancial || 0) - Number(state.thresholds.nf || 0));
+  const fGap = Math.abs((candidate.computed?.financial || 0) - Number(state.thresholds.f || 0));
+  return Math.min(nfGap, fGap);
+}
+
+function disagreementSummary(candidate, limit = 3) {
+  const rows = visibleTableMetrics().map((metric) => {
+    const sources = [
+      num(candidate.scores?.[metric.column]),
+      num(candidate.externalScores?.[metric.column]),
+      num(candidate.aiScores?.[metric.column]),
+    ].filter((value) => value !== null);
+    const spread = sources.length >= 2 ? Math.max(...sources) - Math.min(...sources) : 0;
+    return {
+      column: metric.column,
+      label: metric.label,
+      spread,
+      analyst: num(candidate.scores?.[metric.column]),
+      external: num(candidate.externalScores?.[metric.column]),
+      ai: num(candidate.aiScores?.[metric.column]),
+    };
+  }).filter((row) => row.spread > 0);
+
+  const avgSpread = rows.length
+    ? rows.reduce((sum, row) => sum + row.spread, 0) / rows.length
+    : 0;
+
+  return {
+    avgSpread,
+    metrics: rows.sort((a, b) => b.spread - a.spread).slice(0, limit),
+  };
+}
+
+function evaluationSignalSummary(candidate) {
+  const evaluation = latestEvaluationFor(candidate.id);
+  const analysis = evaluation?.summary?.analysis || null;
+  const disagreements = disagreementSummary(candidate, 3);
+  return {
+    confidence: analysis?.confidence ?? null,
+    summary: analysis?.overallSummary || 'No AI evaluation summary yet.',
+    strengths: Array.isArray(analysis?.keyStrengths) ? analysis.keyStrengths.slice(0, 3) : [],
+    risks: Array.isArray(analysis?.keyRisks) ? analysis.keyRisks.slice(0, 3) : [],
+    disagreements,
+  };
+}
+
+function ensureTableSelection(rows = visibleCandidates()) {
+  if (!rows.length) {
+    state.selectedTableStartupId = null;
+    return null;
+  }
+  if (!state.selectedTableStartupId || !rows.some((candidate) => candidate.id === state.selectedTableStartupId)) {
+    state.selectedTableStartupId = rows[0].id;
+  }
+  return getCandidateById(state.selectedTableStartupId);
 }
 
 function analyticsThresholdKey() {
@@ -493,6 +664,8 @@ function serialize() {
   return {
     ...serializeServerSnapshot(),
     ui: serializeUi(),
+    newStartupDrafts: clone(state.newStartupDrafts || []),
+    newStartupDraft: serializeNewStartupDraft(),
   };
 }
 
@@ -538,8 +711,88 @@ function serializeUi() {
   };
 }
 
+function serializeNewStartupDraft() {
+  const draft = state.newDraft;
+  const meta = state.newDraftMeta || NEW_DRAFT_DEFAULTS;
+  const hasName = Boolean((meta.name || '').trim());
+  const hasClone = Boolean(meta.clone);
+  const hasMeaningfulDraft = draft && getNewStartupMetrics().some((metric) => {
+    const score = num(draft.scores?.[metric.column]);
+    const external = num(draft.externalScores?.[metric.column]);
+    const note = String(draft.notes?.[metric.column] || '').trim();
+    return score !== null || external !== null || note;
+  });
+  if (!hasName && !hasClone && !hasMeaningfulDraft) return null;
+  return {
+    meta: {
+      draftId: meta.draftId || '',
+      name: meta.name || '',
+      template: meta.template || NEW_DRAFT_DEFAULTS.template,
+      clone: meta.clone || '',
+      notesMode: meta.notesMode || NEW_DRAFT_DEFAULTS.notesMode,
+      savedAt: meta.savedAt || null,
+    },
+    draft: draft ? clone(draft) : emptyDraft(),
+  };
+}
+
 function saveUi() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({ ui: serializeUi() }));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    ui: serializeUi(),
+    newStartupDrafts: clone(state.newStartupDrafts || []),
+    newStartupDraft: serializeNewStartupDraft(),
+  }));
+}
+
+function newStartupDraftKey(draftId) {
+  return `${NEW_STARTUP_DRAFT_PREFIX}${draftId}`;
+}
+
+function ensureNewDraftId() {
+  if (state.newDraftMeta.draftId) return state.newDraftMeta.draftId;
+  state.newDraftMeta.draftId = uid();
+  return state.newDraftMeta.draftId;
+}
+
+function draftSavedAtValue(draft) {
+  const raw = draft?.meta?.savedAt;
+  if (!raw) return 0;
+  const timeValue = new Date(raw).getTime();
+  return Number.isFinite(timeValue) ? timeValue : 0;
+}
+
+function pickNewestDraft(primaryDraft, secondaryDraft) {
+  if (!primaryDraft) return secondaryDraft || null;
+  if (!secondaryDraft) return primaryDraft;
+  return draftSavedAtValue(secondaryDraft) > draftSavedAtValue(primaryDraft) ? secondaryDraft : primaryDraft;
+}
+
+function normalizeDraftLibraryEntry(draft, fallbackKey = '') {
+  if (!draft) return null;
+  const draftId = draft?.meta?.draftId || (fallbackKey ? fallbackKey.replace(NEW_STARTUP_DRAFT_PREFIX, '') : '');
+  return {
+    workflowKey: draft.workflowKey || (draftId ? newStartupDraftKey(draftId) : fallbackKey || ''),
+    meta: {
+      ...NEW_DRAFT_DEFAULTS,
+      ...(draft.meta || {}),
+      draftId,
+    },
+    draft: draft.draft ? clone(draft.draft) : emptyDraft(),
+  };
+}
+
+function syncDraftLibraryWithCurrent() {
+  const current = normalizeDraftLibraryEntry(serializeNewStartupDraft());
+  const existing = Array.isArray(state.newStartupDrafts) ? state.newStartupDrafts : [];
+  if (!current?.meta?.draftId) {
+    state.newStartupDrafts = existing
+      .filter((draft) => draft?.meta?.draftId)
+      .sort((a, b) => draftSavedAtValue(b) - draftSavedAtValue(a));
+    return;
+  }
+  const filtered = existing.filter((draft) => draft?.meta?.draftId !== current.meta.draftId);
+  state.newStartupDrafts = [current, ...filtered]
+    .sort((a, b) => draftSavedAtValue(b) - draftSavedAtValue(a));
 }
 
 async function persistServerSnapshot() {
@@ -691,12 +944,22 @@ function hydrate(snapshot) {
   state.weightPreset = ui.weightPreset || 'balanced';
   state.aiSelectedStartupId = ui.aiSelectedStartupId || state.scatterSelectedId || state.compareA;
   state.selectedRows = [];
+  state.selectedTableStartupId = null;
   state.weightPreviewData = null;
   state.analytics = null;
   state.analyticsKey = '';
   state.evaluationJobs = [];
   state.evaluations = [];
   state.aiStatusText = '';
+  state.newStartupDrafts = Array.isArray(snapshot.newStartupDrafts)
+    ? snapshot.newStartupDrafts.map((draft) => normalizeDraftLibraryEntry(draft)).filter(Boolean)
+    : [];
+  state.newDraftMeta = {
+    ...NEW_DRAFT_DEFAULTS,
+    ...(snapshot.newStartupDraft?.meta || {}),
+  };
+  state.newDraft = snapshot.newStartupDraft?.draft ? clone(snapshot.newStartupDraft.draft) : null;
+  syncDraftLibraryWithCurrent();
 
   recomputeAll();
   setDraftWeightsFromModel();
@@ -724,7 +987,168 @@ function freshSnapshot() {
       lastAiEvaluationId: c.lastAiEvaluationId || null,
     })),
     ui: {},
+    newStartupDraft: null,
   };
+}
+
+function syncNewDraftMetaFromInputs() {
+  state.newDraftMeta = {
+    ...state.newDraftMeta,
+    name: els.newName?.value || '',
+    template: els.newTemplate?.value || NEW_DRAFT_DEFAULTS.template,
+    clone: els.newClone?.value || '',
+    notesMode: els.newNotesMode?.value || NEW_DRAFT_DEFAULTS.notesMode,
+  };
+}
+
+function resetNewDraftMeta() {
+  state.newDraftMeta = { ...NEW_DRAFT_DEFAULTS };
+}
+
+async function persistNewStartupDraftRemote() {
+  const draftId = ensureNewDraftId();
+  const payload = serializeNewStartupDraft();
+  if (!state.serverMode) return payload;
+  if (!payload) {
+    await apiJson(`${DRAFTS_URL}/${encodeURIComponent(newStartupDraftKey(draftId))}`, { method: 'DELETE' });
+    return null;
+  }
+  payload.meta.draftId = draftId;
+  const result = await apiJson(`${DRAFTS_URL}/${encodeURIComponent(newStartupDraftKey(draftId))}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return result?.draft || payload;
+}
+
+async function clearPersistedNewStartupDraft(message = 'Draft cleared.', draftIdOverride = '') {
+  const draftId = draftIdOverride || state.newDraftMeta.draftId || '';
+  saveUi();
+  renderNewDraftStatus(message);
+  state.newStartupDrafts = state.newStartupDrafts.filter((draft) => draft?.meta?.draftId !== draftId);
+  renderNewDraftPicker();
+  if (!state.serverMode) return;
+  if (!draftId) return;
+  try {
+    await apiJson(`${DRAFTS_URL}/${encodeURIComponent(newStartupDraftKey(draftId))}`, { method: 'DELETE' });
+  } catch (error) {
+    console.error(error);
+    renderNewDraftStatus('Draft cleared locally. Server sync failed.');
+  }
+}
+
+async function markNewDraftSaved(message = 'Draft saved locally.', options = {}) {
+  const { syncInputs = true } = options;
+  if (syncInputs) syncNewDraftMetaFromInputs();
+  const pendingDraft = serializeNewStartupDraft();
+  if (!pendingDraft) {
+    await clearPersistedNewStartupDraft('Draft not saved yet.');
+    return;
+  }
+  ensureNewDraftId();
+  state.newDraftMeta.savedAt = Date.now();
+  saveUi();
+  renderNewDraftStatus(state.serverMode ? 'Saving draft to server…' : message);
+  if (!state.serverMode) {
+    renderNewDraftStatus(message);
+    return;
+  }
+  try {
+    const savedDraft = await persistNewStartupDraftRemote();
+    if (savedDraft?.meta) {
+      state.newDraftMeta = {
+        ...state.newDraftMeta,
+        ...savedDraft.meta,
+      };
+      if (savedDraft.draft) state.newDraft = clone(savedDraft.draft);
+    }
+    syncDraftLibraryWithCurrent();
+    saveUi();
+    renderNewDraftStatus('Draft saved to server.');
+  } catch (error) {
+    console.error(error);
+    renderNewDraftStatus('Draft saved locally. Server sync failed.');
+  }
+}
+
+function scheduleNewDraftPersist() {
+  clearTimeout(state.newDraftPersistTimer);
+  state.newDraftPersistTimer = window.setTimeout(() => {
+    markNewDraftSaved(state.serverMode ? 'Draft autosaved to server.' : 'Draft autosaved locally.').catch(console.error);
+  }, 250);
+}
+
+function renderNewDraftStatus(message = '') {
+  if (!els.newDraftStatus) return;
+  const savedAt = state.newDraftMeta?.savedAt;
+  const timeText = savedAt ? `Last saved ${new Date(savedAt).toLocaleTimeString()}` : 'Draft not saved yet.';
+  els.newDraftStatus.textContent = message ? `${message} ${timeText}` : timeText;
+}
+
+async function refreshNewStartupDraftLibrary() {
+  if (!state.serverMode) {
+    syncDraftLibraryWithCurrent();
+    return state.newStartupDrafts;
+  }
+  try {
+    const drafts = await apiJson(`${DRAFTS_URL}?prefix=${encodeURIComponent(NEW_STARTUP_DRAFT_PREFIX)}`);
+    state.newStartupDrafts = Array.isArray(drafts)
+      ? drafts.map((draft) => normalizeDraftLibraryEntry(draft)).filter(Boolean)
+      : [];
+    syncDraftLibraryWithCurrent();
+  } catch (error) {
+    console.error(error);
+  }
+  return state.newStartupDrafts;
+}
+
+function activateNewStartupDraft(draft) {
+  const normalized = normalizeDraftLibraryEntry(draft, draft?.workflowKey || '');
+  if (!normalized) return;
+  state.newDraftMeta = {
+    ...NEW_DRAFT_DEFAULTS,
+    ...(normalized.meta || {}),
+  };
+  state.newDraft = normalized.draft ? clone(normalized.draft) : emptyDraft();
+  syncDraftLibraryWithCurrent();
+}
+
+function startFreshNewDraft() {
+  state.newDraft = null;
+  resetNewDraftMeta();
+  buildDraftFromSelections();
+  syncDraftLibraryWithCurrent();
+}
+
+function renderNewDraftPicker() {
+  if (!els.newDraftPicker) return;
+  const drafts = [...(state.newStartupDrafts || [])].sort((a, b) => draftSavedAtValue(b) - draftSavedAtValue(a));
+  els.newDraftPicker.innerHTML = '';
+  if (!drafts.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No saved drafts';
+    els.newDraftPicker.appendChild(option);
+    els.loadDraftBtn.disabled = true;
+    els.deleteDraftBtn.disabled = !state.newDraftMeta.draftId;
+    return;
+  }
+  drafts.forEach((draft, index) => {
+    const option = document.createElement('option');
+    option.value = draft.meta.draftId;
+    const name = (draft.meta.name || '').trim() || `Untitled draft ${index + 1}`;
+    const savedAt = draftSavedAtValue(draft);
+    const suffix = savedAt ? ` · ${new Date(savedAt).toLocaleString()}` : '';
+    option.textContent = `${name}${suffix}`;
+    option.selected = draft.meta.draftId === state.newDraftMeta.draftId;
+    els.newDraftPicker.appendChild(option);
+  });
+  if (!state.newDraftMeta.draftId && els.newDraftPicker.options.length) {
+    els.newDraftPicker.selectedIndex = 0;
+  }
+  els.loadDraftBtn.disabled = !els.newDraftPicker.value;
+  els.deleteDraftBtn.disabled = !(state.newDraftMeta.draftId || els.newDraftPicker.value);
 }
 
 function setPane(pane) {
@@ -1328,13 +1752,181 @@ function renderAiWorkflow() {
   }).join('');
 }
 
+function renderAnalysisActionBoard() {
+  if (!els.analysisActionBoard) return;
+  const ranked = [...state.candidates].sort((a, b) => b.computed.total - a.computed.total || a.name.localeCompare(b.name));
+  if (!ranked.length) {
+    els.analysisActionBoard.innerHTML = '<div class="selected-brief-empty">No startups available for triage.</div>';
+    return;
+  }
+
+  const invest = ranked.filter((candidate) => decisionBucket(candidate) === 'invest').slice(0, 4);
+  const watch = ranked
+    .filter((candidate) => decisionBucket(candidate).startsWith('watch'))
+    .sort((a, b) => nearThresholdDistance(a) - nearThresholdDistance(b))
+    .slice(0, 4);
+  const disagreement = ranked
+    .map((candidate) => ({
+      candidate,
+      disagreement: disagreementSummary(candidate, 2),
+    }))
+    .filter((row) => row.disagreement.metrics.length)
+    .sort((a, b) => b.disagreement.avgSpread - a.disagreement.avgSpread)
+    .slice(0, 4);
+  const coverageGaps = ranked
+    .map((candidate) => ({
+      candidate,
+      notes: noteCoverageSummary(candidate),
+      quality: pointQuality(candidate),
+    }))
+    .sort((a, b) => a.notes.filled - b.notes.filled || a.quality.coverage - b.quality.coverage)
+    .slice(0, 4);
+
+  const watchCount = ranked.filter((candidate) => decisionBucket(candidate).startsWith('watch')).length;
+  const passCount = ranked.filter((candidate) => decisionBucket(candidate) === 'pass').length;
+  const nearThresholdCount = ranked.filter((candidate) => nearThresholdDistance(candidate) <= 12).length;
+
+  const listItem = (candidate, metaHtml = '') => `
+    <div class="pipeline-item">
+      <div class="pipeline-item-copy">
+        <strong>${escapeHtml(candidate.name)}</strong>
+        <span>${escapeHtml(decisionBucketLabel(decisionBucket(candidate)))} · Total ${escapeHtml(fmt(candidate.computed.total))} · ${escapeHtml(candidateStage(candidate))}</span>
+        ${metaHtml}
+      </div>
+      <div class="pipeline-item-actions">
+        <button class="ghost" type="button" data-action="analysis-open-pipeline" data-id="${escapeHtml(candidate.id)}">Open</button>
+        <button class="ghost" type="button" data-action="analysis-compare-top" data-id="${escapeHtml(candidate.id)}">Compare</button>
+        <button class="ghost" type="button" data-action="analysis-queue-ai" data-id="${escapeHtml(candidate.id)}"${state.serverMode ? '' : ' disabled'}>Queue AI</button>
+      </div>
+    </div>
+  `;
+
+  els.analysisActionBoard.innerHTML = `
+    <div class="summary">
+      <div class="kpi"><div class="muted">Invest</div><strong>${escapeHtml(String(invest.length))}</strong></div>
+      <div class="kpi"><div class="muted">Watch</div><strong>${escapeHtml(String(watchCount))}</strong></div>
+      <div class="kpi"><div class="muted">Pass</div><strong>${escapeHtml(String(passCount))}</strong></div>
+      <div class="kpi"><div class="muted">Near Threshold</div><strong>${escapeHtml(String(nearThresholdCount))}</strong></div>
+      <div class="kpi"><div class="muted">Queued AI Jobs</div><strong>${escapeHtml(String(state.evaluationJobs.filter((job) => job.status === 'queued').length))}</strong></div>
+      <div class="kpi"><div class="muted">High Disagreement</div><strong>${escapeHtml(String(disagreement.length))}</strong></div>
+    </div>
+    <div class="pipeline-board-grid">
+      <div class="pipeline-column">
+        <h4>Invest Priority</h4>
+        <p class="muted">Best current fit for partner review and deeper diligence.</p>
+        <div class="pipeline-list">
+          ${invest.length ? invest.map((candidate) => {
+            const confidence = evaluationSignalSummary(candidate).confidence;
+            const confidenceText = confidence !== null && confidence !== undefined
+              ? `${fmt(confidence * 100, 0)}% confidence`
+              : 'AI confidence pending';
+            return listItem(candidate, `<span>${escapeHtml(quadrantOf(candidate))} · ${escapeHtml(confidenceText)}</span>`);
+          }).join('') : '<p class="muted">No invest-priority startups yet.</p>'}
+        </div>
+      </div>
+      <div class="pipeline-column">
+        <h4>Near Threshold</h4>
+        <p class="muted">Closest to flipping into a stronger decision zone.</p>
+        <div class="pipeline-list">
+          ${watch.length ? watch.map((candidate) => listItem(candidate, `<span>${escapeHtml(fmt(nearThresholdDistance(candidate), 0))} points from threshold</span>`)).join('') : '<p class="muted">No near-threshold startups right now.</p>'}
+        </div>
+      </div>
+      <div class="pipeline-column">
+        <h4>Highest Disagreement</h4>
+        <p class="muted">Analyst, external, and AI scores are not aligned.</p>
+        <div class="pipeline-list">
+          ${disagreement.length ? disagreement.map(({ candidate, disagreement: summary }) => listItem(candidate, `<span>${escapeHtml(summary.metrics.map((metric) => `${displayColumn(metric.column)} ${metric.label}`).join(' · '))}</span>`)).join('') : '<p class="muted">No material scoring disagreement yet.</p>'}
+        </div>
+      </div>
+      <div class="pipeline-column">
+        <h4>Coverage Gaps</h4>
+        <p class="muted">Analyst notes or evidence coverage need attention.</p>
+        <div class="pipeline-list">
+          ${coverageGaps.length ? coverageGaps.map(({ candidate, notes, quality }) => listItem(candidate, `<span>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))} notes · ${escapeHtml(fmt(quality.coverage * 100, 0))}% coverage</span>`)).join('') : '<p class="muted">No coverage gaps surfaced.</p>'}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderAnalysisPanels() {
   renderRanking();
   renderDistribution();
   renderQuadrantPieChart();
   renderRankingContributionChart();
   renderOpportunityChart();
+  renderSelectedStartupBrief();
+  renderAnalysisActionBoard();
   renderAiWorkflow();
+}
+
+function renderSelectedStartupBrief() {
+  if (!els.selectedStartupBrief) return;
+
+  const candidate = getCandidateById(state.scatterSelectedId);
+  els.briefCompareBtn.disabled = !candidate || state.candidates.length < 2;
+  els.briefPipelineBtn.disabled = !candidate;
+
+  if (!candidate) {
+    els.selectedStartupBrief.className = 'selected-brief-empty';
+    els.selectedStartupBrief.innerHTML = 'Select a startup from the scatter to open its analyst brief.';
+    return;
+  }
+
+  const quality = pointQuality(candidate);
+  const notes = noteCoverageSummary(candidate);
+  const quadrant = quadrantOf(candidate);
+  const leaders = topMetricContributors(candidate);
+  const gaps = fastestImprovementGaps(candidate);
+  const benchmark = topCandidateExcluding(candidate.id);
+  const latestEvaluation = latestEvaluationFor(candidate.id);
+  const aiSummary = latestEvaluation?.summary?.analysis?.overallSummary || 'No AI evaluation summary yet.';
+  const tags = candidateTags(candidate);
+  const stage = candidateStage(candidate);
+  const topDelta = benchmark ? candidate.computed.total - benchmark.computed.total : 0;
+
+  els.selectedStartupBrief.className = 'selected-brief-grid';
+  els.selectedStartupBrief.innerHTML = `
+    <div class="selected-brief-primary">
+      <div class="selected-brief-heading">
+        <div>
+          <h4>${escapeHtml(candidate.name)}</h4>
+          <p>${escapeHtml(stage)} · ${escapeHtml(quadrant)}</p>
+        </div>
+        <div class="selected-brief-chips">
+          ${tags.length ? tags.map((tag) => `<span class="brief-chip">${escapeHtml(tag)}</span>`).join('') : '<span class="brief-chip is-muted">No tags</span>'}
+        </div>
+      </div>
+      <div class="selected-brief-kpis">
+        <div class="kpi"><div class="muted">Total</div><strong>${escapeHtml(fmt(candidate.computed.total))}</strong></div>
+        <div class="kpi"><div class="muted">Non-Fin</div><strong>${escapeHtml(fmt(candidate.computed.nonFinancial))}</strong></div>
+        <div class="kpi"><div class="muted">Fin</div><strong>${escapeHtml(fmt(candidate.computed.financial))}</strong></div>
+        <div class="kpi"><div class="muted">Notes</div><strong>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))}</strong></div>
+      </div>
+    </div>
+    <div class="selected-brief-insights">
+      <div class="decision-item">
+        <strong>Portfolio standing</strong>
+        <span>${benchmark ? `${topDelta >= 0 ? '+' : ''}${fmt(topDelta)} vs top-ranked ${benchmark.name}` : 'Current top-ranked startup'}</span>
+      </div>
+      <div class="decision-item">
+        <strong>Coverage quality</strong>
+        <span>${fmt(quality.coverage * 100, 0)}% metric coverage across scored inputs</span>
+      </div>
+      <div class="decision-item">
+        <strong>Strongest weighted drivers</strong>
+        <span>${leaders.length ? leaders.map((metric) => `${displayColumn(metric.column)} ${metric.label}`).join(' · ') : 'No weighted drivers yet'}</span>
+      </div>
+      <div class="decision-item">
+        <strong>Fastest score uplift areas</strong>
+        <span>${gaps.length ? gaps.map((metric) => `${displayColumn(metric.column)} ${metric.label}`).join(' · ') : 'Already at max score on visible metrics'}</span>
+      </div>
+      <div class="decision-item">
+        <strong>AI readout</strong>
+        <span>${escapeHtml(aiSummary)}</span>
+      </div>
+    </div>
+  `;
 }
 
 function ensureCompareSelection() {
@@ -1404,6 +1996,62 @@ function renderCompare() {
         : `rgba(220, 38, 38, ${0.15 + ratio * 0.55})`;
       const val = d.delta > 0 ? `+${fmt(d.delta)}` : fmt(d.delta);
       return `<div class="heat-cell" style="background:${tone}"><strong>${escapeHtml(d.label)}</strong><span>${escapeHtml(val)}</span></div>`;
+    }).join('');
+  }
+  if (els.compareEvidence) {
+    els.compareEvidence.innerHTML = compareMetrics.map((metric) => {
+      const analystA = num(a.scores?.[metric.column]);
+      const externalA = num(a.externalScores?.[metric.column]);
+      const aiA = num(a.aiScores?.[metric.column]);
+      const analystB = num(b.scores?.[metric.column]);
+      const externalB = num(b.externalScores?.[metric.column]);
+      const aiB = num(b.aiScores?.[metric.column]);
+      const scoreA = scoringCore.resolveMetricScore(a, metric.column) ?? 0;
+      const scoreB = scoringCore.resolveMetricScore(b, metric.column) ?? 0;
+      const delta = state.compareMode === 'weighted'
+        ? (scoreA - scoreB) * (Number(metric.weight) || 0)
+        : (scoreA - scoreB);
+      const noteA = String(a.notes?.[metric.column] || '').trim() || 'No analyst note.';
+      const noteB = String(b.notes?.[metric.column] || '').trim() || 'No analyst note.';
+      const aiNoteA = String(a.aiRationales?.[metric.column] || '').trim();
+      const aiNoteB = String(b.aiRationales?.[metric.column] || '').trim();
+      const sign = delta > 0 ? '+' : '';
+      const tone = delta > 0 ? 'is-positive' : delta < 0 ? 'is-negative' : 'is-flat';
+      return `
+        <div class="compare-evidence-row">
+          <div class="compare-evidence-head">
+            <div>
+              <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
+              <span class="muted">Weight ${escapeHtml(fmt(metric.weight, 0))}</span>
+            </div>
+            <span class="compare-evidence-delta ${tone}">${escapeHtml(sign)}${escapeHtml(fmt(delta))} ${state.compareMode === 'weighted' ? 'weighted' : 'raw'} delta</span>
+          </div>
+          <div class="compare-evidence-grid">
+            <div class="compare-evidence-startup">
+              <h4>${escapeHtml(a.name)}</h4>
+              <div class="compare-evidence-kpis">
+                <span>Blended ${escapeHtml(fmt(scoreA))}</span>
+                <span>Analyst ${escapeHtml(fmt(analystA))}</span>
+                <span>External ${escapeHtml(fmt(externalA))}</span>
+                <span>AI ${escapeHtml(fmt(aiA))}</span>
+              </div>
+              <p>${escapeHtml(noteA)}</p>
+              ${aiNoteA ? `<div class="compare-ai-note">AI: ${escapeHtml(aiNoteA)}</div>` : ''}
+            </div>
+            <div class="compare-evidence-startup">
+              <h4>${escapeHtml(b.name)}</h4>
+              <div class="compare-evidence-kpis">
+                <span>Blended ${escapeHtml(fmt(scoreB))}</span>
+                <span>Analyst ${escapeHtml(fmt(analystB))}</span>
+                <span>External ${escapeHtml(fmt(externalB))}</span>
+                <span>AI ${escapeHtml(fmt(aiB))}</span>
+              </div>
+              <p>${escapeHtml(noteB)}</p>
+              ${aiNoteB ? `<div class="compare-ai-note">AI: ${escapeHtml(aiNoteB)}</div>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
     }).join('');
   }
 
@@ -1536,11 +2184,11 @@ function templateScores(key) {
 
 function buildDraftFromSelections() {
   const draft = emptyDraft();
-  const cloneId = els.newClone.value;
+  const cloneId = state.newDraftMeta.clone || '';
   const cloneC = state.candidates.find((c) => c.id === cloneId) || null;
-  const tScores = templateScores(els.newTemplate.value || 'balanced');
+  const tScores = templateScores(state.newDraftMeta.template || 'balanced');
 
-  getNewStartupMetrics().forEach((m) => {
+  getNewStartupMetrics().forEach((m, index) => {
     if (cloneC) {
       draft.scores[m.column] = num(cloneC.scores[m.column]) ?? tScores[m.column] ?? null;
       draft.externalScores[m.column] = num(cloneC.externalScores?.[m.column]) ?? null;
@@ -1550,7 +2198,9 @@ function buildDraftFromSelections() {
       draft.scores[m.column] = tScores[m.column] ?? null;
       draft.externalScores[m.column] = null;
       draft.aiScores[m.column] = null;
-      draft.notes[m.column] = els.newNotesMode.value === 'rubric' ? `Evidence for ${m.label} (why 1-5?)` : '';
+      draft.notes[m.column] = state.newDraftMeta.notesMode === 'rubric'
+        ? newStartupPrompt(m, index)
+        : '';
     }
   });
 
@@ -1569,12 +2219,16 @@ function getNewStartupSections() {
 
 function sectionCompletion(metrics, draft) {
   let done = 0;
+  let missingScores = 0;
+  let missingNotes = 0;
   metrics.forEach((m) => {
     const scoreFilled = num(draft.scores[m.column]) !== null;
     const noteFilled = Boolean((draft.notes[m.column] || '').trim());
     if (scoreFilled && noteFilled) done += 1;
+    if (!scoreFilled) missingScores += 1;
+    if (!noteFilled) missingNotes += 1;
   });
-  return { done, total: metrics.length };
+  return { done, total: metrics.length, missingScores, missingNotes };
 }
 
 function renderNewForm() {
@@ -1597,8 +2251,9 @@ function renderNewForm() {
     els.newTemplate.value = 'balanced';
     els.newTemplate.dataset.init = '1';
   }
+  els.newName.value = state.newDraftMeta.name || '';
+  els.newTemplate.value = state.newDraftMeta.template || 'balanced';
 
-  const oldClone = els.newClone.value;
   els.newClone.innerHTML = '<option value="">None</option>';
   [...state.candidates].sort((a, b) => a.name.localeCompare(b.name)).forEach((c) => {
     const o = document.createElement('option');
@@ -1606,9 +2261,13 @@ function renderNewForm() {
     o.textContent = c.name;
     els.newClone.appendChild(o);
   });
-  if ([...els.newClone.options].some((o) => o.value === oldClone)) els.newClone.value = oldClone;
+  if ([...els.newClone.options].some((o) => o.value === state.newDraftMeta.clone)) els.newClone.value = state.newDraftMeta.clone;
+  else els.newClone.value = '';
+  els.newNotesMode.value = state.newDraftMeta.notesMode || 'empty';
 
   if (!state.newDraft) buildDraftFromSelections();
+  renderNewDraftStatus();
+  renderNewDraftPicker();
 
   els.newMetrics.innerHTML = '';
   const sections = getNewStartupSections();
@@ -1620,17 +2279,23 @@ function renderNewForm() {
 
     const comp = sectionCompletion(section.metrics, state.newDraft);
     const allDone = comp.done === comp.total && comp.total > 0;
+    const blockingText = `${comp.missingScores} scores missing · ${comp.missingNotes} explanations missing`;
     const summary = document.createElement('summary');
     summary.className = 'new-section-summary';
     summary.innerHTML = `
-      <span class="new-section-title">${escapeHtml(section.title)}</span>
+      <span>
+        <span class="new-section-title">${escapeHtml(section.title)}</span>
+        <span class="new-section-required ${allDone ? 'is-done' : ''}">
+          ${allDone ? 'All required fields complete' : escapeHtml(blockingText)}
+        </span>
+      </span>
       <span class="new-section-status ${allDone ? 'is-done' : ''}">
-        ${escapeHtml(String(comp.done))}/${escapeHtml(String(comp.total))} completed
+        ${escapeHtml(String(comp.done))}/${escapeHtml(String(comp.total))} complete
       </span>
     `;
     block.appendChild(summary);
 
-    section.metrics.forEach((m) => {
+    section.metrics.forEach((m, metricIndex) => {
       const row = document.createElement('div');
       row.className = 'metric-row';
 
@@ -1643,6 +2308,10 @@ function renderNewForm() {
       const select = scoreSelect(state.newDraft.scores[m.column], (v) => { state.newDraft.scores[m.column] = v; });
       select.dataset.metric = m.column;
       select.dataset.role = 'analyst-score';
+      select.addEventListener('change', () => {
+        scheduleNewDraftPersist();
+        renderNewForm();
+      });
       sl.appendChild(select);
 
       const exl = document.createElement('label');
@@ -1650,18 +2319,28 @@ function renderNewForm() {
       const externalSelect = scoreSelect(state.newDraft.externalScores[m.column], (v) => { state.newDraft.externalScores[m.column] = v; });
       externalSelect.dataset.metric = m.column;
       externalSelect.dataset.role = 'external-score';
+      externalSelect.addEventListener('change', scheduleNewDraftPersist);
       exl.appendChild(externalSelect);
 
       const nl = document.createElement('label');
       nl.textContent = 'Explanation';
       const ta = document.createElement('textarea');
       ta.rows = 3;
-      ta.placeholder = 'Write evidence and rationale.';
+      ta.placeholder = newStartupPrompt(m, getNewStartupMetrics().indexOf(m));
       ta.value = state.newDraft.notes[m.column] || '';
       ta.dataset.metric = m.column;
       ta.dataset.role = 'note';
-      ta.addEventListener('input', () => { state.newDraft.notes[m.column] = ta.value; });
+      ta.addEventListener('input', () => {
+        state.newDraft.notes[m.column] = ta.value;
+        scheduleNewDraftPersist();
+        refreshNewSectionStatuses();
+      });
       nl.appendChild(ta);
+
+      const hint = document.createElement('p');
+      hint.className = 'metric-evidence-hint';
+      hint.textContent = newStartupPrompt(m, getNewStartupMetrics().indexOf(m));
+      nl.appendChild(hint);
 
       const ail = document.createElement('label');
       ail.textContent = 'AI Score';
@@ -1690,6 +2369,28 @@ function renderNewForm() {
   });
   if ([...els.guideMetric.options].some((o) => o.value === current)) els.guideMetric.value = current;
   renderGuide();
+}
+
+function refreshNewSectionStatuses() {
+  const sections = getNewStartupSections();
+  sections.forEach((section) => {
+    const block = els.newMetrics.querySelector(`.new-section[data-section="${section.key}"]`);
+    if (!block) return;
+    const comp = sectionCompletion(section.metrics, state.newDraft);
+    const allDone = comp.done === comp.total && comp.total > 0;
+    const status = block.querySelector('.new-section-status');
+    const required = block.querySelector('.new-section-required');
+    if (status) {
+      status.textContent = `${comp.done}/${comp.total} complete`;
+      status.classList.toggle('is-done', allDone);
+    }
+    if (required) {
+      required.textContent = allDone
+        ? 'All required fields complete'
+        : `${comp.missingScores} scores missing · ${comp.missingNotes} explanations missing`;
+      required.classList.toggle('is-done', allDone);
+    }
+  });
 }
 
 function renderGuide() {
@@ -1867,6 +2568,7 @@ async function refreshWeightPreview() {
 
 function renderTable() {
   const rows = visibleCandidates();
+  ensureTableSelection(rows);
   const thead = els.table.querySelector('thead');
   const tbody = els.table.querySelector('tbody');
   const selection = selectedRowSet();
@@ -1883,6 +2585,10 @@ function renderTable() {
 
   rows.forEach((c, i) => {
     const tr = document.createElement('tr');
+    tr.className = c.id === state.selectedTableStartupId ? 'is-selected-row' : '';
+    tr.dataset.id = c.id;
+    tr.tabIndex = 0;
+    tr.setAttribute('role', 'button');
 
     const tdCheck = document.createElement('td');
     const checkbox = document.createElement('input');
@@ -1977,6 +2683,128 @@ function renderTable() {
 
   const headerToggle = document.getElementById('tableSelectAll');
   if (headerToggle) headerToggle.checked = rows.length > 0 && selectedVisible === rows.length;
+  renderTableDetail();
+}
+
+function renderTableDetail() {
+  if (!els.tableDetailPanel) return;
+  const rows = visibleCandidates();
+  const candidate = ensureTableSelection(rows);
+  els.tableDetailCompareBtn.disabled = !candidate || state.candidates.length < 2;
+  els.tableDetailQueueBtn.disabled = !candidate || !state.serverMode;
+
+  if (!candidate) {
+    els.tableDetailPanel.className = 'selected-brief-empty';
+    els.tableDetailPanel.innerHTML = 'Select a startup row to inspect its pipeline detail.';
+    return;
+  }
+
+  const quality = pointQuality(candidate);
+  const notes = noteCoverageSummary(candidate);
+  const topDrivers = topMetricContributors(candidate, 4);
+  const topGaps = fastestImprovementGaps(candidate, 4);
+  const signalSummary = evaluationSignalSummary(candidate);
+  const stage = candidateStage(candidate);
+  const tags = candidateTags(candidate);
+  const evaluationMatrix = visibleTableMetrics().map((metric) => {
+    const analyst = num(candidate.scores?.[metric.column]);
+    const external = num(candidate.externalScores?.[metric.column]);
+    const ai = num(candidate.aiScores?.[metric.column]);
+    const blended = scoringCore.resolveMetricScore(candidate, metric.column);
+    const spreadValues = [analyst, external, ai].filter((value) => value !== null);
+    const spread = spreadValues.length >= 2 ? Math.max(...spreadValues) - Math.min(...spreadValues) : 0;
+    return `
+      <div class="evaluation-matrix-row">
+        <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
+        <span>${escapeHtml(fmt(analyst))}</span>
+        <span>${escapeHtml(fmt(external))}</span>
+        <span>${escapeHtml(fmt(ai))}</span>
+        <span>${escapeHtml(fmt(blended))}</span>
+        <span class="${spread >= 2 ? 'is-alert-text' : ''}">${escapeHtml(fmt(spread))}</span>
+      </div>
+    `;
+  }).join('');
+  const noteBlocks = visibleTableMetrics().map((metric) => {
+    const score = scoringCore.resolveMetricScore(candidate, metric.column);
+    const note = String(candidate.notes?.[metric.column] || '').trim();
+    return `
+      <div class="startup-note-card">
+        <div class="startup-note-head">
+          <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
+          <span class="muted">Score ${escapeHtml(fmt(score))} · Weight ${escapeHtml(fmt(metric.weight, 0))}</span>
+        </div>
+        <p>${escapeHtml(note || 'No analyst note entered for this metric yet.')}</p>
+      </div>
+    `;
+  }).join('');
+
+  els.tableDetailPanel.className = 'startup-detail-grid';
+  els.tableDetailPanel.innerHTML = `
+    <div class="startup-detail-overview">
+      <div class="selected-brief-heading">
+        <div>
+          <h4>${escapeHtml(candidate.name)}</h4>
+          <p>${escapeHtml(stage)} · ${escapeHtml(quadrantOf(candidate))}</p>
+        </div>
+        <div class="selected-brief-chips">
+          ${tags.length ? tags.map((tag) => `<span class="brief-chip">${escapeHtml(tag)}</span>`).join('') : '<span class="brief-chip is-muted">No tags</span>'}
+        </div>
+      </div>
+      <div class="selected-brief-kpis">
+        <div class="kpi"><div class="muted">Total</div><strong>${escapeHtml(fmt(candidate.computed.total))}</strong></div>
+        <div class="kpi"><div class="muted">Non-Fin</div><strong>${escapeHtml(fmt(candidate.computed.nonFinancial))}</strong></div>
+        <div class="kpi"><div class="muted">Fin</div><strong>${escapeHtml(fmt(candidate.computed.financial))}</strong></div>
+        <div class="kpi"><div class="muted">Coverage</div><strong>${escapeHtml(fmt(quality.coverage * 100, 0))}%</strong></div>
+      </div>
+      <div class="decision-summary startup-detail-summary">
+        <div class="decision-item"><strong>Notes coverage</strong><span>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))} metrics documented</span></div>
+        <div class="decision-item"><strong>Top weighted drivers</strong><span>${escapeHtml(topDrivers.length ? topDrivers.map((metric) => metric.label).join(' · ') : 'No weighted drivers yet')}</span></div>
+        <div class="decision-item"><strong>Fastest improvement areas</strong><span>${escapeHtml(topGaps.length ? topGaps.map((metric) => metric.label).join(' · ') : 'Already at max visible score')}</span></div>
+        <div class="decision-item"><strong>AI confidence</strong><span>${signalSummary.confidence !== null && signalSummary.confidence !== undefined ? `${escapeHtml(fmt(signalSummary.confidence * 100, 0))}%` : 'Not evaluated yet'}</span></div>
+        <div class="decision-item"><strong>Highest score disagreements</strong><span>${escapeHtml(signalSummary.disagreements.metrics.length ? signalSummary.disagreements.metrics.map((metric) => `${displayColumn(metric.column)} ${metric.label}`).join(' · ') : 'No major disagreement')}</span></div>
+        <div class="decision-item"><strong>Latest AI summary</strong><span>${escapeHtml(signalSummary.summary)}</span></div>
+      </div>
+      <div class="startup-detail-actions">
+        <label>Move stage
+          <select id="tableDetailStageSelect">
+            <option value="sourcing"${stage === 'sourcing' ? ' selected' : ''}>sourcing</option>
+            <option value="diligence"${stage === 'diligence' ? ' selected' : ''}>diligence</option>
+            <option value="ic-ready"${stage === 'ic-ready' ? ' selected' : ''}>ic-ready</option>
+            <option value="watchlist"${stage === 'watchlist' ? ' selected' : ''}>watchlist</option>
+            <option value="pass"${stage === 'pass' ? ' selected' : ''}>pass</option>
+          </select>
+        </label>
+        <button id="tableDetailApplyStageBtn" type="button">Update Stage</button>
+      </div>
+    </div>
+    <div class="startup-detail-notes">
+      <h4>Decision Signals</h4>
+      <div class="startup-signal-grid">
+        <div class="startup-signal-card">
+          <strong>Strengths</strong>
+          <p>${escapeHtml(signalSummary.strengths.length ? signalSummary.strengths.join(' · ') : 'No AI strengths available yet.')}</p>
+        </div>
+        <div class="startup-signal-card">
+          <strong>Risks</strong>
+          <p>${escapeHtml(signalSummary.risks.length ? signalSummary.risks.join(' · ') : 'No AI risks available yet.')}</p>
+        </div>
+      </div>
+      <h4>Evaluation Matrix</h4>
+      <div class="evaluation-matrix">
+        <div class="evaluation-matrix-row evaluation-matrix-head">
+          <strong>Metric</strong>
+          <span>Analyst</span>
+          <span>External</span>
+          <span>AI</span>
+          <span>Blended</span>
+          <span>Spread</span>
+        </div>
+        ${evaluationMatrix}
+      </div>
+      <h4>Metric Notes</h4>
+      <div class="startup-note-list">${noteBlocks}</div>
+    </div>
+  `;
 }
 
 function renderWeights() {
@@ -2177,6 +3005,7 @@ function attachEvents() {
     state.scatterSelectedId = state.scatterSelectedId === nearest.id ? null : nearest.id;
     state.aiSelectedStartupId = state.scatterSelectedId || state.aiSelectedStartupId;
     renderScatter();
+    renderSelectedStartupBrief();
     renderAiWorkflow();
     save();
   });
@@ -2302,6 +3131,26 @@ function attachEvents() {
     renderCompare();
   });
 
+  els.briefCompareBtn?.addEventListener('click', () => {
+    const selected = getCandidateById(state.scatterSelectedId);
+    if (!selected) return;
+    const benchmark = topCandidateExcluding(selected.id);
+    state.compareA = selected.id;
+    state.compareB = benchmark?.id || state.compareB || selected.id;
+    state.activePane = 'compare';
+    save();
+    renderAll();
+  });
+
+  els.briefPipelineBtn?.addEventListener('click', () => {
+    const selected = getCandidateById(state.scatterSelectedId);
+    if (!selected) return;
+    state.search = selected.name;
+    state.activePane = 'table';
+    save();
+    renderAll();
+  });
+
   els.searchInput.addEventListener('input', () => {
     state.search = els.searchInput.value;
     save();
@@ -2393,6 +3242,30 @@ function attachEvents() {
     refreshRemoteDerivedData({ workflow: true }).catch(console.error);
   });
 
+  els.table.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.closest('input, select, button, textarea, label')) return;
+    const row = target.closest('tr[data-id]');
+    if (!row) return;
+    state.selectedTableStartupId = row.dataset.id;
+    save();
+    renderTable();
+  });
+
+  els.table.addEventListener('keydown', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const row = target.closest('tr[data-id]');
+    if (!row) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (target.closest('input, select, button, textarea')) return;
+    event.preventDefault();
+    state.selectedTableStartupId = row.dataset.id;
+    save();
+    renderTable();
+  });
+
   els.table.addEventListener('change', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -2434,6 +3307,104 @@ function attachEvents() {
       candidate.stage = target.value;
       save();
       renderTable();
+    }
+  });
+
+  els.tableDetailCompareBtn?.addEventListener('click', () => {
+    const candidate = getCandidateById(state.selectedTableStartupId);
+    if (!candidate) return;
+    const benchmark = topCandidateExcluding(candidate.id);
+    state.compareA = candidate.id;
+    state.compareB = benchmark?.id || state.compareB || candidate.id;
+    state.activePane = 'compare';
+    save();
+    renderAll();
+  });
+
+  els.tableDetailQueueBtn?.addEventListener('click', async () => {
+    const candidate = getCandidateById(state.selectedTableStartupId);
+    if (!candidate || !state.serverMode) return;
+    try {
+      await apiJson(EVALUATION_JOBS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startupId: candidate.id,
+          requestedBy: 'table-detail',
+          payload: { trigger: 'pipeline-detail' },
+        }),
+      });
+      state.aiSelectedStartupId = candidate.id;
+      state.aiStatusText = `Evaluation job queued for ${candidate.name}.`;
+      await refreshEvaluationWorkflow({ render: false });
+      renderTableDetail();
+      renderAiWorkflow();
+    } catch (error) {
+      alert(error.message);
+    }
+  });
+
+  document.addEventListener('click', async (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action === 'analysis-open-pipeline') {
+      const candidate = getCandidateById(target.dataset.id);
+      if (!candidate) return;
+      state.selectedTableStartupId = candidate.id;
+      state.search = candidate.name;
+      state.activePane = 'table';
+      save();
+      renderAll();
+      return;
+    }
+    if (target.dataset.action === 'analysis-compare-top') {
+      const candidate = getCandidateById(target.dataset.id);
+      if (!candidate) return;
+      const benchmark = topCandidateExcluding(candidate.id);
+      state.compareA = candidate.id;
+      state.compareB = benchmark?.id || state.compareB || candidate.id;
+      state.activePane = 'compare';
+      save();
+      renderAll();
+      return;
+    }
+    if (target.dataset.action === 'analysis-queue-ai') {
+      const candidate = getCandidateById(target.dataset.id);
+      if (!candidate || !state.serverMode) return;
+      try {
+        await apiJson(EVALUATION_JOBS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            startupId: candidate.id,
+            requestedBy: 'analysis-triage',
+            payload: { trigger: 'triage-board' },
+          }),
+        });
+        state.aiSelectedStartupId = candidate.id;
+        state.aiStatusText = `Evaluation job queued for ${candidate.name}.`;
+        await refreshEvaluationWorkflow({ render: false });
+        renderAnalysisPanels();
+      } catch (error) {
+        alert(error.message);
+      }
+      return;
+    }
+    if (target.id !== 'tableDetailApplyStageBtn') return;
+    const candidate = getCandidateById(state.selectedTableStartupId);
+    const select = document.getElementById('tableDetailStageSelect');
+    if (!candidate || !(select instanceof HTMLSelectElement)) return;
+    try {
+      if (state.serverMode) {
+        const saved = await updateStartupRemote(candidate.id, { stage: select.value });
+        Object.assign(candidate, saved);
+      } else {
+        candidate.stage = select.value;
+      }
+      save();
+      renderTable();
+    } catch (error) {
+      alert(error.message);
     }
   });
 
@@ -2554,22 +3525,83 @@ function attachEvents() {
   els.guideMetric.addEventListener('change', renderGuide);
 
   const rebuildDraft = () => {
+    syncNewDraftMetaFromInputs();
     buildDraftFromSelections();
     renderNewForm();
+    markNewDraftSaved(state.serverMode ? 'Draft prefilled and saved to server.' : 'Draft prefilled and saved locally.').catch(console.error);
     setFeedback('Draft prefilled.', 'neutral');
   };
+  els.newDraftPicker?.addEventListener('change', () => {
+    els.loadDraftBtn.disabled = !els.newDraftPicker.value;
+    els.deleteDraftBtn.disabled = !(state.newDraftMeta.draftId || els.newDraftPicker.value);
+  });
+  els.loadDraftBtn?.addEventListener('click', () => {
+    const draftId = els.newDraftPicker.value;
+    if (!draftId) return;
+    const draft = state.newStartupDrafts.find((entry) => entry?.meta?.draftId === draftId);
+    if (!draft) return;
+    activateNewStartupDraft(draft);
+    renderNewForm();
+    saveUi();
+    setFeedback(`Loaded draft "${state.newDraftMeta.name || 'Untitled draft'}".`, 'neutral');
+  });
+  els.newDraftBtn?.addEventListener('click', () => {
+    startFreshNewDraft();
+    renderNewForm();
+    saveUi();
+    setFeedback('Started a new draft.', 'neutral');
+  });
+  els.deleteDraftBtn?.addEventListener('click', async () => {
+    const draftId = state.newDraftMeta.draftId || els.newDraftPicker.value;
+    if (!draftId) return;
+    const deletingActive = draftId === state.newDraftMeta.draftId;
+    state.newStartupDrafts = state.newStartupDrafts.filter((draft) => draft?.meta?.draftId !== draftId);
+    if (deletingActive) {
+      state.newDraft = null;
+      resetNewDraftMeta();
+      buildDraftFromSelections();
+    }
+    saveUi();
+    renderNewForm();
+    setFeedback('Draft deleted.', 'success');
+    if (!state.serverMode) return;
+    try {
+      await apiJson(`${DRAFTS_URL}/${encodeURIComponent(newStartupDraftKey(draftId))}`, { method: 'DELETE' });
+      await refreshNewStartupDraftLibrary();
+      renderNewDraftPicker();
+    } catch (error) {
+      console.error(error);
+      setFeedback('Draft removed locally, but server delete failed.', 'error');
+    }
+  });
   els.prefillBtn.addEventListener('click', rebuildDraft);
   els.newTemplate.addEventListener('change', rebuildDraft);
   els.newClone.addEventListener('change', rebuildDraft);
   els.newNotesMode.addEventListener('change', rebuildDraft);
+  els.newName.addEventListener('input', () => {
+    syncNewDraftMetaFromInputs();
+    scheduleNewDraftPersist();
+    renderNewDraftStatus();
+  });
+
+  els.saveDraftBtn.addEventListener('click', () => {
+    syncNewDraftMetaFromInputs();
+    if (!state.newDraft) buildDraftFromSelections();
+    markNewDraftSaved(state.serverMode ? 'Draft saved to server.' : 'Draft saved locally.').catch(console.error);
+    setFeedback('Draft saved. You can continue later before creating the startup.', 'success');
+  });
 
   els.clearBtn.addEventListener('click', () => {
+    const currentDraftId = state.newDraftMeta.draftId || '';
     els.newName.value = '';
     els.newTemplate.value = 'balanced';
     els.newClone.value = '';
     els.newNotesMode.value = 'empty';
+    resetNewDraftMeta();
+    state.newDraftMeta.draftId = currentDraftId;
     buildDraftFromSelections();
     renderNewForm();
+    markNewDraftSaved(state.serverMode ? 'Draft reset and saved to server.' : 'Draft reset and saved locally.').catch(console.error);
     setFeedback('', 'neutral');
   });
 
@@ -2625,9 +3657,10 @@ function attachEvents() {
     }
     recomputeAll();
     ensureCompareSelection();
-    els.newName.value = '';
-    els.newClone.value = candidate.id;
-    buildDraftFromSelections();
+    const draftIdToClear = state.newDraftMeta.draftId || '';
+    state.newDraft = null;
+    resetNewDraftMeta();
+    await clearPersistedNewStartupDraft('Draft cleared after startup creation.', draftIdToClear);
     state.activePane = 'table';
     save();
     renderAll();
@@ -2647,6 +3680,7 @@ function attachEvents() {
       hydrate(freshSnapshot());
       localStorage.removeItem(STORAGE_KEY);
       state.newDraft = null;
+      resetNewDraftMeta();
       saveUi();
       renderAll();
       refreshRemoteDerivedData().catch(console.error);
@@ -2661,6 +3695,7 @@ function attachEvents() {
         localStorage.removeItem(STORAGE_KEY);
         hydrate({ ...snapshot, ui: {} });
         state.newDraft = null;
+        resetNewDraftMeta();
         renderAll();
         refreshRemoteDerivedData().catch(console.error);
       })
@@ -2686,7 +3721,12 @@ function attachEvents() {
         return res.json();
       })
       .then((snapshot) => {
-        const blob = new Blob([JSON.stringify({ ...snapshot, ui: serializeUi() }, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify({
+          ...snapshot,
+          ui: serializeUi(),
+          newStartupDrafts: clone(state.newStartupDrafts || snapshot.newStartupDrafts || []),
+          newStartupDraft: serializeNewStartupDraft(),
+        }, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -2707,9 +3747,16 @@ function attachEvents() {
       const snap = JSON.parse(text);
       if (!snap?.model || !Array.isArray(snap?.candidates)) throw new Error('Invalid JSON format');
       if (!state.serverMode) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ui: snap.ui || serializeUi() }));
-        hydrate(snap);
-        state.newDraft = null;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          ui: snap.ui || serializeUi(),
+          newStartupDrafts: snap.newStartupDrafts || (snap.newStartupDraft ? [snap.newStartupDraft] : []),
+          newStartupDraft: snap.newStartupDraft || null,
+        }));
+        hydrate({
+          ...snap,
+          newStartupDraft: snap.newStartupDraft || snap.newStartupDrafts?.[0] || null,
+          newStartupDrafts: snap.newStartupDrafts || (snap.newStartupDraft ? [snap.newStartupDraft] : []),
+        });
         renderAll();
         refreshRemoteDerivedData().catch(console.error);
         return;
@@ -2721,9 +3768,17 @@ function attachEvents() {
       });
       if (!res.ok) throw new Error(`Import failed: ${res.status}`);
       const saved = await res.json();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ui: snap.ui || serializeUi() }));
-      hydrate({ ...saved, ui: snap.ui || serializeUi() });
-      state.newDraft = null;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ui: snap.ui || serializeUi(),
+        newStartupDrafts: snap.newStartupDrafts || (snap.newStartupDraft ? [snap.newStartupDraft] : []),
+        newStartupDraft: snap.newStartupDraft || null,
+      }));
+      hydrate({
+        ...saved,
+        ui: snap.ui || serializeUi(),
+        newStartupDraft: snap.newStartupDraft || snap.newStartupDrafts?.[0] || saved.newStartupDraft || null,
+        newStartupDrafts: snap.newStartupDrafts || saved.newStartupDrafts || (snap.newStartupDraft ? [snap.newStartupDraft] : []),
+      });
       renderAll();
       refreshRemoteDerivedData().catch(console.error);
     } catch (err) {
@@ -2745,7 +3800,24 @@ async function init() {
     const remote = await fetchBootstrapSnapshot();
     state.original = remote;
     const local = loadSaved();
-    if (state.serverMode) hydrate({ ...remote, ui: local?.ui || {} });
+    if (state.serverMode) {
+      const remoteDrafts = Array.isArray(remote?.newStartupDrafts) ? remote.newStartupDrafts : [];
+      const localDrafts = Array.isArray(local?.newStartupDrafts) ? local.newStartupDrafts : (local?.newStartupDraft ? [local.newStartupDraft] : []);
+      const mergedDrafts = [...remoteDrafts];
+      localDrafts.forEach((draft) => {
+        const normalized = normalizeDraftLibraryEntry(draft);
+        if (!normalized?.meta?.draftId) return;
+        if (!mergedDrafts.some((entry) => normalizeDraftLibraryEntry(entry)?.meta?.draftId === normalized.meta.draftId)) {
+          mergedDrafts.push(normalized);
+        }
+      });
+      hydrate({
+        ...remote,
+        ui: local?.ui || {},
+        newStartupDrafts: mergedDrafts,
+        newStartupDraft: pickNewestDraft(remote?.newStartupDraft || null, local?.newStartupDraft || null),
+      });
+    }
     else {
       const merged = local?.model && Array.isArray(local?.candidates)
         ? local

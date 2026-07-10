@@ -6,6 +6,8 @@ const { computePortfolio } = require('./scoring-core');
 
 const pool = DATABASE_CONFIG ? new Pool(DATABASE_CONFIG) : null;
 let initPromise = null;
+const NEW_STARTUP_DRAFT_KEY = 'new-startup';
+const NEW_STARTUP_DRAFT_PREFIX = 'new-startup:';
 
 function readSeed() {
   const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
@@ -45,6 +47,81 @@ async function getConfigValue(key) {
   return rows[0] ? rows[0].value : null;
 }
 
+async function getWorkflowDraft(workflowKey) {
+  const { rows } = await query(`
+    SELECT workflow_key, payload_json, created_at, updated_at
+    FROM workflow_drafts
+    WHERE workflow_key = $1
+    LIMIT 1
+  `, [workflowKey]);
+  if (!rows[0]) return null;
+  const payload = rows[0].payload_json || {};
+  return {
+    workflowKey: rows[0].workflow_key,
+    ...payload,
+    meta: {
+      ...(payload.meta || {}),
+      savedAt: payload?.meta?.savedAt || rows[0].updated_at,
+    },
+  };
+}
+
+async function listWorkflowDrafts(prefix = '') {
+  const clauses = [];
+  const params = [];
+  if (prefix) {
+    params.push(`${prefix}%`);
+    clauses.push(`workflow_key LIKE $${params.length}`);
+  }
+  const whereSql = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const { rows } = await query(`
+    SELECT workflow_key, payload_json, created_at, updated_at
+    FROM workflow_drafts
+    ${whereSql}
+    ORDER BY updated_at DESC, created_at DESC
+  `, params);
+  return rows.map((row) => {
+    const payload = row.payload_json || {};
+    return {
+      workflowKey: row.workflow_key,
+      ...payload,
+      meta: {
+        ...(payload.meta || {}),
+        draftId: payload?.meta?.draftId || row.workflow_key.replace(NEW_STARTUP_DRAFT_PREFIX, ''),
+        savedAt: payload?.meta?.savedAt || row.updated_at,
+      },
+    };
+  });
+}
+
+async function saveWorkflowDraft(workflowKey, payload, clientOverride = null) {
+  const executor = clientOverride || pool;
+  if (!executor) throw new Error('DATABASE_URL is not configured');
+  if (!workflowKey) throw new Error('workflowKey is required');
+  if (!payload) {
+    await executor.query('DELETE FROM workflow_drafts WHERE workflow_key = $1', [workflowKey]);
+    return null;
+  }
+  await executor.query(`
+    INSERT INTO workflow_drafts (workflow_key, payload_json)
+    VALUES ($1, $2::jsonb)
+    ON CONFLICT (workflow_key) DO UPDATE
+    SET payload_json = EXCLUDED.payload_json,
+        updated_at = NOW()
+  `, [workflowKey, JSON.stringify(payload)]);
+  return getWorkflowDraft(workflowKey);
+}
+
+async function deleteWorkflowDraft(workflowKey) {
+  await query('DELETE FROM workflow_drafts WHERE workflow_key = $1', [workflowKey]);
+}
+
+async function deleteWorkflowDraftsByPrefix(prefix, clientOverride = null) {
+  const executor = clientOverride || pool;
+  if (!executor) throw new Error('DATABASE_URL is not configured');
+  await executor.query('DELETE FROM workflow_drafts WHERE workflow_key LIKE $1', [`${prefix}%`]);
+}
+
 async function seedDbWithClient(client) {
   const seed = readSeed();
   try {
@@ -52,6 +129,7 @@ async function seedDbWithClient(client) {
     await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['model', JSON.stringify(seed.model)]);
     await client.query('DELETE FROM candidates');
     await client.query('DELETE FROM evaluations');
+    await client.query('DELETE FROM workflow_drafts');
     for (const [index, rawCandidate] of seed.candidates.entries()) {
       const candidate = normalizeCandidate(rawCandidate, index);
       await client.query(`
@@ -171,6 +249,25 @@ async function initDb() {
 async function readSnapshot() {
   const model = await getConfigValue('model');
   const source = await getConfigValue('source');
+  const [legacyDraft, prefixedDrafts] = await Promise.all([
+    getWorkflowDraft(NEW_STARTUP_DRAFT_KEY),
+    listWorkflowDrafts(NEW_STARTUP_DRAFT_PREFIX),
+  ]);
+  const newStartupDrafts = [...prefixedDrafts];
+  if (legacyDraft) {
+    const legacyId = legacyDraft?.meta?.draftId || 'legacy';
+    if (!newStartupDrafts.some((draft) => (draft?.meta?.draftId || '') === legacyId)) {
+      newStartupDrafts.push({
+        ...legacyDraft,
+        meta: {
+          ...legacyDraft.meta,
+          draftId: legacyId,
+        },
+      });
+    }
+  }
+  newStartupDrafts.sort((a, b) => new Date(b?.meta?.savedAt || 0).getTime() - new Date(a?.meta?.savedAt || 0).getTime());
+  const newStartupDraft = newStartupDrafts[0] || null;
   const { rows } = await query(`
     SELECT id, source_index, name, normalized_name, scores_json, external_scores_json,
            ai_scores_json, ai_rationales_json, notes_json,
@@ -200,6 +297,8 @@ async function readSnapshot() {
     source,
     model,
     candidates,
+    newStartupDrafts,
+    newStartupDraft,
     computed: computePortfolio(candidates, model.weights),
   };
 }
@@ -248,6 +347,26 @@ async function saveSnapshot(snapshot) {
       ON CONFLICT (id) DO UPDATE
       SET weights_json = EXCLUDED.weights_json, is_active = EXCLUDED.is_active
     `, [JSON.stringify(snapshot.model.weights || [])]);
+    if (Array.isArray(snapshot.newStartupDrafts)) {
+      await deleteWorkflowDraftsByPrefix(NEW_STARTUP_DRAFT_PREFIX, client);
+      await saveWorkflowDraft(NEW_STARTUP_DRAFT_KEY, null, client);
+      for (const draft of snapshot.newStartupDrafts) {
+        const draftId = draft?.meta?.draftId || Math.random().toString(36).slice(2, 10);
+        await saveWorkflowDraft(`${NEW_STARTUP_DRAFT_PREFIX}${draftId}`, {
+          ...draft,
+          meta: {
+            ...(draft.meta || {}),
+            draftId,
+          },
+        }, client);
+      }
+    } else if (Object.prototype.hasOwnProperty.call(snapshot, 'newStartupDraft')) {
+      if (snapshot.newStartupDraft?.meta?.draftId) {
+        await saveWorkflowDraft(`${NEW_STARTUP_DRAFT_PREFIX}${snapshot.newStartupDraft.meta.draftId}`, snapshot.newStartupDraft, client);
+      } else {
+        await saveWorkflowDraft(NEW_STARTUP_DRAFT_KEY, snapshot.newStartupDraft || null, client);
+      }
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -518,6 +637,13 @@ module.exports = {
   seedDb,
   readSnapshot,
   saveSnapshot,
+  NEW_STARTUP_DRAFT_KEY,
+  NEW_STARTUP_DRAFT_PREFIX,
+  getWorkflowDraft,
+  listWorkflowDrafts,
+  saveWorkflowDraft,
+  deleteWorkflowDraft,
+  deleteWorkflowDraftsByPrefix,
   listCandidates,
   saveCandidate,
   updateCandidate,

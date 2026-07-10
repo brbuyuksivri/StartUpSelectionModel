@@ -16,6 +16,10 @@ const {
   saveCandidate,
   updateCandidate,
   deleteCandidate,
+  getWorkflowDraft,
+  listWorkflowDrafts,
+  saveWorkflowDraft,
+  deleteWorkflowDraft,
   listScorecards,
   listWeightSets,
   applyWeights,
@@ -35,6 +39,7 @@ const { createWeightsService } = require('./weights.service');
 const { createEvaluationsService } = require('./evaluations.service');
 const { createAnalyticsService } = require('./analytics.service');
 const { createEvaluationJobsService } = require('./evaluation-jobs.service');
+const { createDraftsService } = require('./drafts.service');
 const { createOpenAiEvaluator, hasOpenAiConfig } = require('./ai-evaluator.openai.service');
 
 function json(res, status, body) {
@@ -96,6 +101,7 @@ async function getServices() {
         bootstrapService: createBootstrapService({ readSnapshot }),
         snapshotService: createSnapshotService({ readSnapshot, saveSnapshot, seedDb }),
         startupsService: createStartupsService({ listCandidates, saveCandidate, updateCandidate, deleteCandidate }),
+        draftsService: createDraftsService({ getWorkflowDraft, listWorkflowDrafts, saveWorkflowDraft, deleteWorkflowDraft }),
         scorecardsService: createScorecardsService({ listScorecards }),
         weightsService: createWeightsService({ listWeightSets, readSnapshot, applyWeights }),
         evaluationsService: createEvaluationsService({ listEvaluations, readSnapshot, saveEvaluation }),
@@ -153,6 +159,7 @@ async function handleApiRequest(req, res, options = {}) {
       bootstrapService,
       snapshotService,
       startupsService,
+      draftsService,
       scorecardsService,
       weightsService,
       evaluationsService,
@@ -201,6 +208,36 @@ async function handleApiRequest(req, res, options = {}) {
 
     if (req.method === 'GET' && pathname === '/api/startups') {
       json(res, 200, await startupsService.list());
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/drafts') {
+      json(res, 200, await draftsService.list(url.searchParams.get('prefix') || ''));
+      return;
+    }
+
+    if (req.method === 'GET' && pathname.startsWith('/api/drafts/')) {
+      const workflowKey = decodeURIComponent(pathname.split('/').pop());
+      json(res, 200, {
+        workflowKey,
+        draft: await draftsService.get(workflowKey),
+      });
+      return;
+    }
+
+    if ((req.method === 'PUT' || req.method === 'POST') && pathname.startsWith('/api/drafts/')) {
+      const workflowKey = decodeURIComponent(pathname.split('/').pop());
+      const payload = await readBody(req);
+      json(res, 200, {
+        workflowKey,
+        draft: await draftsService.save(workflowKey, payload),
+      });
+      return;
+    }
+
+    if (req.method === 'DELETE' && pathname.startsWith('/api/drafts/')) {
+      const workflowKey = decodeURIComponent(pathname.split('/').pop());
+      json(res, 200, await draftsService.remove(workflowKey));
       return;
     }
 
