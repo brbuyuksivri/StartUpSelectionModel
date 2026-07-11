@@ -270,7 +270,7 @@ async function seedDbWithClient(client) {
       VALUES ('default-weights', 'Default Weights', TRUE, $1::jsonb)
       ON CONFLICT (id) DO UPDATE
       SET name = EXCLUDED.name, is_active = EXCLUDED.is_active, weights_json = EXCLUDED.weights_json
-    `, [JSON.stringify(seed.model.weights || [])]);
+    `, [JSON.stringify(seed.model.metrics || [])]);
   } catch (error) {
     throw error;
   }
@@ -402,7 +402,7 @@ async function readSnapshot() {
     candidates,
     newStartupDrafts,
     newStartupDraft,
-    computed: computePortfolio(candidates, model.weights),
+    computed: computePortfolio(candidates, model.metrics || []),
   };
 }
 
@@ -451,7 +451,7 @@ async function saveSnapshot(snapshot) {
       VALUES ('default-weights', 'Default Weights', TRUE, $1::jsonb)
       ON CONFLICT (id) DO UPDATE
       SET weights_json = EXCLUDED.weights_json, is_active = EXCLUDED.is_active
-    `, [JSON.stringify(normalizedModel.weights || [])]);
+    `, [JSON.stringify(normalizedModel.metrics || [])]);
     if (Array.isArray(snapshot.newStartupDrafts)) {
       await deleteWorkflowDraftsByPrefix(NEW_STARTUP_DRAFT_PREFIX, client);
       await saveWorkflowDraft(NEW_STARTUP_DRAFT_KEY, null, client);

@@ -8,27 +8,73 @@ function hasOpenAiConfig() {
   return Boolean(OPENAI_API_KEY);
 }
 
+function buildMetricPayload(startup, metrics) {
+  return metrics.map((metric) => ({
+    column: metric.column,
+    key: metric.key,
+    label: metric.label,
+    weight: Number(metric.weight) || 0,
+    group: metric.group || 'other',
+    section: metric.sectionLabel || metric.sectionKey || '',
+    externalUserScore: startup.externalScores?.[metric.column] ?? null,
+    analystNotes: String(startup.notes?.[metric.column] || '').trim(),
+    evidencePrompts: Array.isArray(metric.evidencePrompts) ? metric.evidencePrompts : [],
+    scoreDescriptions: metric.scoreDescriptions || {},
+  }));
+}
+
+function buildEvaluationMessages(startup, metrics) {
+  const detail = startup.detail || {};
+  return [
+    {
+      role: 'system',
+      content: [
+        'You are an institutional VC startup evaluation assistant.',
+        'Your task is to score each metric from 1 to 5 using the analyst-written notes for that specific metric.',
+        'For each metric, compare the analyst note directly against that metric’s score descriptions.',
+        'Treat the external user score as a weak secondary reference only. Do not copy it unless the note supports it.',
+        'Do not use any analyst score as an input signal. Score from the note evidence itself.',
+        'If the note is vague, incomplete, or missing proof, choose the lower score rather than the optimistic score.',
+        'When evidence is too thin, use 1 or 2 and explain what is missing.',
+        'Rationales must be concise, specific, and grounded in the provided note.',
+        'Return valid JSON only.',
+      ].join(' '),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        startup: {
+          id: startup.id,
+          name: startup.name,
+          stage: startup.stage || 'sourcing',
+          tags: Array.isArray(startup.tags) ? startup.tags : [],
+          overview: {
+            summary: String(detail?.overview?.summary || '').trim(),
+            thesis: String(detail?.overview?.thesis || '').trim(),
+            nextStep: String(detail?.overview?.nextStep || '').trim(),
+          },
+        },
+        scoringInstructions: {
+          scale: [1, 2, 3, 4, 5],
+          rule: 'Choose exactly one integer score per metric.',
+          tieBreak: 'If the evidence sits between two scores, choose the lower one unless the note explicitly supports the higher level.',
+        },
+        metrics: buildMetricPayload(startup, metrics),
+      }),
+    },
+  ];
+}
+
 function createOpenAiEvaluator() {
   return {
     isConfigured() {
       return hasOpenAiConfig();
     },
 
-    async evaluateStartup({ startup, metrics, rubrics }) {
+    async evaluateStartup({ startup, metrics }) {
       if (!OPENAI_API_KEY) {
         throw new Error('OPENAI_API_KEY is not configured');
       }
-
-      const metricSchema = metrics.map((metric) => ({
-        column: metric.column,
-        label: metric.label,
-        weight: Number(metric.weight) || 0,
-        group: metric.group || 'other',
-        analystScore: startup.scores?.[metric.column] ?? null,
-        externalScore: startup.externalScores?.[metric.column] ?? null,
-        analystNotes: startup.notes?.[metric.column] || '',
-        rubric: rubrics.find((rubric) => rubric.column === metric.column)?.rubric || '',
-      }));
 
       const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
         method: 'POST',
@@ -66,7 +112,7 @@ function createOpenAiEvaluator() {
                     items: {
                       type: 'object',
                       additionalProperties: false,
-                      required: ['column', 'score', 'rationale'],
+                      required: ['column', 'score', 'rationale', 'matchedDescription', 'missingEvidence'],
                       properties: {
                         column: {
                           type: 'string',
@@ -78,6 +124,12 @@ function createOpenAiEvaluator() {
                           maximum: 5,
                         },
                         rationale: { type: 'string' },
+                        matchedDescription: { type: 'string' },
+                        missingEvidence: {
+                          type: 'array',
+                          items: { type: 'string' },
+                          maxItems: 3,
+                        },
                       },
                     },
                   },
@@ -85,29 +137,7 @@ function createOpenAiEvaluator() {
               },
             },
           },
-          messages: [
-            {
-              role: 'system',
-              content: [
-                'You are an institutional VC startup evaluation assistant.',
-                'Score each metric from 1 to 5 based primarily on the analyst notes.',
-                'Use external user score as a soft reference, not as a binding answer.',
-                'When notes are thin, score conservatively and explain the uncertainty.',
-                'Return valid JSON only.',
-              ].join(' '),
-            },
-            {
-              role: 'user',
-              content: JSON.stringify({
-                startup: {
-                  id: startup.id,
-                  name: startup.name,
-                  stage: startup.stage || 'sourcing',
-                },
-                metrics: metricSchema,
-              }),
-            },
-          ],
+          messages: buildEvaluationMessages(startup, metrics),
         }),
       });
 

@@ -10,7 +10,7 @@ function createEvaluationsService(deps) {
       const startup = snapshot.candidates.find((candidate) => candidate.id === startupId);
       if (!startup) throw new Error('Startup not found');
 
-      const computed = scoringCore.computeCandidate(startup, snapshot.model.weights);
+      const computed = scoringCore.computeCandidate(startup, snapshot.model.metrics || []);
       const evaluation = {
         id: `eval_${Date.now()}`,
         startupId,

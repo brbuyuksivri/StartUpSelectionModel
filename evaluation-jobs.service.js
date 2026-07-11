@@ -1,12 +1,12 @@
 const scoringCore = require('./scoring-core');
 
 function createEvaluationJobsService(deps) {
-  function buildEvaluation(startup, weights, source, jobId = null, analysis = null) {
+  function buildEvaluation(startup, metrics, source, jobId = null, analysis = null) {
     return {
       id: `eval_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       startupId: startup.id,
       summary: {
-        computed: scoringCore.computeCandidate(startup, weights),
+        computed: scoringCore.computeCandidate(startup, metrics),
         generatedAt: new Date().toISOString(),
         source,
         jobId,
@@ -45,11 +45,11 @@ function createEvaluationJobsService(deps) {
         const snapshot = await deps.readSnapshot();
         const startup = snapshot.candidates.find((candidate) => candidate.id === job.startupId);
         if (!startup) throw new Error('Startup not found');
+        const metrics = snapshot.model.metrics || [];
 
         const aiResult = await deps.aiEvaluator.evaluateStartup({
           startup,
-          metrics: snapshot.model.weights,
-          rubrics: snapshot.model.metricRubrics || [],
+          metrics,
         });
 
         const nextAiScores = { ...(startup.aiScores || {}) };
@@ -65,7 +65,7 @@ function createEvaluationJobsService(deps) {
           aiRationales: nextAiRationales,
         };
 
-        const evaluation = buildEvaluation(enrichedStartup, snapshot.model.weights, 'openai-queue', job.id, {
+        const evaluation = buildEvaluation(enrichedStartup, metrics, 'openai-queue', job.id, {
           provider: aiResult.provider,
           model: aiResult.model,
           overallSummary: aiResult.overallSummary,

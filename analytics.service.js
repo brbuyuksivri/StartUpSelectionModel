@@ -26,7 +26,8 @@ function createAnalyticsService(deps) {
   return {
     async getPortfolioAnalytics(options = {}) {
       const snapshot = await deps.readSnapshot();
-      const candidates = snapshot.computed || scoringCore.computePortfolio(snapshot.candidates, snapshot.model.weights);
+      const metrics = snapshot.model.metrics || [];
+      const candidates = snapshot.computed || scoringCore.computePortfolio(snapshot.candidates, metrics);
       if (!candidates.length) {
         return {
           generatedAt: new Date().toISOString(),
@@ -70,7 +71,7 @@ function createAnalyticsService(deps) {
       const totals = candidates.map((candidate) => candidate.computed.total);
       const nfValues = candidates.map((candidate) => candidate.computed.nonFinancial);
       const fValues = candidates.map((candidate) => candidate.computed.financial);
-      const maxTotal = scoringCore.maxPossibleTotal(snapshot.model.weights, 5);
+      const maxTotal = scoringCore.maxPossibleTotal(metrics, 5);
       const requestedNf = parseOptionalNumber(options.nf);
       const requestedF = parseOptionalNumber(options.f);
 

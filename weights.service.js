@@ -7,7 +7,7 @@ function createWeightsService(deps) {
     },
     async preview(draftWeights) {
       const snapshot = await deps.readSnapshot();
-      const currentMetrics = snapshot.model.weights || [];
+      const currentMetrics = snapshot.model.metrics || [];
       const draftMetrics = currentMetrics.map((metric) => ({
         ...metric,
         weight: draftWeights[metric.column] ?? metric.weight,
