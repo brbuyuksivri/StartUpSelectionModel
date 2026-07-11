@@ -23,6 +23,7 @@ const {
   listScorecards,
   listWeightSets,
   applyWeights,
+  saveModel,
   saveEvaluation,
   listEvaluations,
   listEvaluationJobs,
@@ -35,6 +36,7 @@ const { createBootstrapService } = require('./api.bootstrap.service');
 const { createSnapshotService } = require('./api.snapshot.service');
 const { createStartupsService } = require('./startups.service');
 const { createScorecardsService } = require('./scorecards.service');
+const { createModelService } = require('./model.service');
 const { createWeightsService } = require('./weights.service');
 const { createEvaluationsService } = require('./evaluations.service');
 const { createAnalyticsService } = require('./analytics.service');
@@ -103,6 +105,7 @@ async function getServices() {
         startupsService: createStartupsService({ listCandidates, saveCandidate, updateCandidate, deleteCandidate }),
         draftsService: createDraftsService({ getWorkflowDraft, listWorkflowDrafts, saveWorkflowDraft, deleteWorkflowDraft }),
         scorecardsService: createScorecardsService({ listScorecards }),
+        modelService: createModelService({ readSnapshot, saveModel }),
         weightsService: createWeightsService({ listWeightSets, readSnapshot, applyWeights }),
         evaluationsService: createEvaluationsService({ listEvaluations, readSnapshot, saveEvaluation }),
         analyticsService: createAnalyticsService({ readSnapshot }),
@@ -161,6 +164,7 @@ async function handleApiRequest(req, res, options = {}) {
       startupsService,
       draftsService,
       scorecardsService,
+      modelService,
       weightsService,
       evaluationsService,
       analyticsService,
@@ -262,6 +266,17 @@ async function handleApiRequest(req, res, options = {}) {
 
     if (req.method === 'GET' && pathname === '/api/scorecards') {
       json(res, 200, await scorecardsService.list());
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/api/model') {
+      json(res, 200, await modelService.get());
+      return;
+    }
+
+    if ((req.method === 'PUT' || req.method === 'POST') && pathname === '/api/model') {
+      const payload = await readBody(req);
+      json(res, 200, await modelService.update(payload || {}));
       return;
     }
 

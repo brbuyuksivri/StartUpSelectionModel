@@ -86,6 +86,7 @@
     const current = computePortfolio(candidates, currentMetrics, groups).sort((a, b) => b.computed.total - a.computed.total);
     const draft = computePortfolio(candidates, draftMetrics, groups).sort((a, b) => b.computed.total - a.computed.total);
     const currentRank = new Map(current.map((candidate, index) => [candidate.id, index + 1]));
+    const currentTotals = new Map(current.map((candidate) => [candidate.id, candidate.computed.total]));
 
     return draft.map((candidate, index) => {
       const before = currentRank.get(candidate.id) || index + 1;
@@ -96,6 +97,7 @@
         after: index + 1,
         movement: before - (index + 1),
         total: candidate.computed.total,
+        totalDelta: candidate.computed.total - (currentTotals.get(candidate.id) || 0),
       };
     });
   }

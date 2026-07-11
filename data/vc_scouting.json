@@ -16,67 +16,67 @@
       {
         "column": "B",
         "label": "Founder Gücü",
-        "weight": 9.0,
+        "weight": 9,
         "group": "nonFinancial"
       },
       {
         "column": "C",
         "label": "VC Değerleriyle Uyum ve Toplumsal Etki",
-        "weight": 7.0,
+        "weight": 7,
         "group": "nonFinancial"
       },
       {
         "column": "D",
         "label": "Etik, Güven ve Takım Dinamiği",
-        "weight": 7.0,
+        "weight": 7,
         "group": "nonFinancial"
       },
       {
         "column": "E",
         "label": "Ekosistem Doğrulaması ve Yatırımcı Talebi",
-        "weight": 7.0,
+        "weight": 7,
         "group": "nonFinancial"
       },
       {
         "column": "F",
         "label": "Operasyonel Olgunluk ve İlerleme Hızı",
-        "weight": 5.0,
+        "weight": 5,
         "group": "nonFinancial"
       },
       {
         "column": "G",
         "label": "Çıkış Stratejisi (Exit Potansiyeli)",
-        "weight": 3.0,
+        "weight": 3,
         "group": "financial"
       },
       {
         "column": "H",
         "label": "Bugüne Kadar Toplanan Yatırım",
-        "weight": 5.0,
+        "weight": 5,
         "group": "financial"
       },
       {
         "column": "I",
         "label": "Son Yatırım Tarihi ve Runway Sinyali",
-        "weight": 3.0,
+        "weight": 3,
         "group": "financial"
       },
       {
         "column": "J",
         "label": "Yatırımcı Kalitesi",
-        "weight": 5.0,
+        "weight": 5,
         "group": "financial"
       },
       {
         "column": "K",
         "label": "Follow-on Investment Sinyali",
-        "weight": 1.0,
+        "weight": 1,
         "group": "financial"
       },
       {
         "column": "L",
         "label": "Yatırımcı Sezgisi",
-        "weight": 7.0,
+        "weight": 7,
         "group": "intuition"
       }
     ],
@@ -154,1268 +154,7 @@
       "total": "nonFinancial + financial + (intuition[L] * weight[L])"
     }
   },
-  "candidates": [
-    {
-      "name": "Varsapp",
-      "normalizedName": "varsapp",
-      "scores": {
-        "B": 1.0,
-        "C": 1.0,
-        "D": 1.0,
-        "E": 3.0,
-        "F": 5.0,
-        "G": 3.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "1 – Kamuya açık kaynaklarda kurucu, eğitim veya önceki başarı bilgisi doğrulanamadığı için founder gücünü somut verilerle değerlendirmek mümkün değil.",
-        "C": "1 – Web sitesinde veya kamuya açık profillerde VC değerlerine dair (kapsayıcılık, etki) açıklama bulunmuyor.",
-        "D": "1 – Kamuya açık kaynaklarda ekip bilgisi ve iletişim yapısı net olmadığı için bu metrikte kanıtlanabilir veri yok.",
-        "E": "3 – Girişim 200 bin USD yatırım aldı ve yerel girişimcilik ekosisteminde (medya/hızlandırıcı) görünürlük kazandı.",
-        "F": "5 – Platform 100.000+ kullanıcıya ulaştı, 200 bin USD yatırım alınca mobil uygulama güncellemeleri ve marka anlaşmalarıyla operasyonel büyüme gösterdi.  ",
-        "G": "3 – İkinci el / kiralama pazarında yerel exit örnekleri olsa da global stratejik alıcı havuzu sınırlı.",
-        "H": "3 – Erken aşamada sınırlı yatırım almış, fon miktarı ölçek için henüz düşük seviyede.",
-        "I": "3 – Son yatırım görece yakın olsa da yeni büyüme adımları sınırlı, runway orta seviyede görünüyor.",
-        "J": "3 – Erken aşama melek yatırımcılar ve sınırlı kurumsal destek mevcut, ancak üst seviye fon bulunmuyor.",
-        "K": "3 – Mevcut yatırımcıların ilk turda yer aldığı biliniyor, ancak tekrar yatırım yaptıklarına dair net bir duyuru yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 69,
-        "financialScore": 51,
-        "totalScore": 120
-      }
-    },
-    {
-      "name": "Quin AI",
-      "normalizedName": "quinai",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 3.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu ekibin AI ve ürün odağında ilgili geçmişi ve kamusal liderlik görünürlüğü güçlü olduğu için founder gücü yüksek.",
-        "C": "5 – Kadın kurucular tarafından yönetilen, 8 Mart/International Women’s Day gibi etkinliklerde toplumsal fayda ve destek programları açıkladı; cinsiyet eşitliğini operasyonel olarak yansıtan uygulamalar mevcut.  ",
-        "D": "5 – LinkedIn’da kadın kurucuların ve ekibin net listelendiği, misyon ve ekip iletişimlerinin açıkça paylaşıldığı bir yapı var; güvenilir ve tutarlı iletişim görünüyor.  ",
-        "E": "3 – Erken aşama melek yatırımcı desteği ve Türkiye AI ekosisteminde görünürlük mevcut.",
-        "F": "5 – Ürün pazarda aktif, müşteri kazanımı ve düzenli iletişim/paylaşım ile ilerleme hızı yüksek.",
-        "G": "5 – AI & martech alanında global platformlara (Adobe, Salesforce, Google vb.) net satın alma senaryosu bulunuyor.",
-        "H": "3 – Melek ve erken aşama yatırım almış, ancak henüz büyük fon girişi yok.",
-        "I": "3 – Erken aşama yatırım sonrası ilerleme var, ancak yakın zamanda yeni tur sinyali net değil.",
-        "J": "3 – Yerel ve erken aşama yatırımcılar yer alıyor, global ölçekte tanınmış fon yok.",
-        "K": "3 – Erken yatırımcılar şirkette kalmaya devam ediyor fakat follow-on katılımı açıkça belirtilmemiş.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 161,
-        "financialScore": 57,
-        "totalScore": 218
-      }
-    },
-    {
-      "name": "Actioner",
-      "normalizedName": "actioner",
-      "scores": {
-        "B": 5.0,
-        "C": 3.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 5.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucunun daha önce OpsGenie’de kurucu ortak olması ve büyük ölçekli exit deneyimi, güçlü vizyon ve dayanıklılık gösteriyor.",
-        "C": "3 – Şirket sitesi/misyon metni var ancak toplumsal etki veya çeşitlilik hedeflerine dair somut veya ölçülebilir bir açıklama bulunmadı.",
-        "D": "5 – Actioner’ın kurucu/ekip profilleri açıkça listelenmiş ve geçmiş exit tecrübeleri ile yönetime dair tutarlı bilgi mevcut.",
-        "E": "5 – Girişim, OpsGenie çıkışı olan kurucusuyla global yatırımcı ve ekosistem ilgisi çekmiştir.",
-        "F": "5 – Kurucu ekibin geçmiş tecrübesiyle ürün kurumsal müşterilerde aktif kullanılıyor ve ölçekleniyor.",
-        "G": "5 – DevOps / otomasyon alanında Atlassian, PagerDuty gibi güçlü exit emsalleri mevcut.",
-        "H": "5 – Güçlü kurucu geçmişi sayesinde kurumsal ve nitelikli yatırımcı ilgisiyle anlamlı sermaye girişi sağlanmış.",
-        "I": "5 – Son yatırım sonrası aktif ölçekleme adımları atılıyor, kısa vadeli finansal baskı görünmüyor.",
-        "J": "5 – Daha önce büyük exit’ler yapmış, global ölçekte tanınan yatırımcılar tarafından destekleniyor.",
-        "K": "5 – Önceki yatırımcıların sonraki turlara tekrar katıldığı ve desteklerini sürdürdüğü kamuya açık.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 161,
-        "financialScore": 85,
-        "totalScore": 246
-      }
-    },
-    {
-      "name": "YanCep",
-      "normalizedName": "yancep",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 3.0,
-        "E": 3.0,
-        "F": 5.0,
-        "G": 3.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucu ve ekip bilgileri erişilebilir olsa da önceki exit veya büyük ölçekli başarıya dair net kanıt sınırlı.",
-        "C": "3 – Şirket/ekip bilgisi bulunuyor ancak VC değerleriyle (etki/kapsayıcılık) ilgili somut açıklama veya uygulama bulmak mümkün olmadı.",
-        "D": "3 – YanCep için ekip/kurucu bilgisi bulunabiliyor ancak şeffaf iletişim ve takım dinamiğine dair açık veri sınırlı.",
-        "E": "3 – Fintech alanında faaliyet gösteren girişim, yerel ekosistemde bilinirlik kazanmıştır.",
-        "F": "5 – Finansal ürün canlı, kullanıcı sayısı artıyor ve operasyonel süreçler net biçimde ilerliyor.",
-        "G": "3 – Fintech altyapı ürünü olsa da ölçeklenmeden exit için erken aşamada.",
-        "H": "3 – Erken aşama yatırım alınmış, ancak toplam sermaye hâlâ sınırlı.",
-        "I": "3 – Son yatırım yapılmış olsa da üzerinden zaman geçmiş, runway orta seviyede.",
-        "J": "3 – Yerel yatırımcılar ve bireysel fonlayıcılar ağırlıklı, üst segment fon bulunmuyor.",
-        "K": "3 – İlk yatırımcılar ilişkisini koruyor, ancak ek tur katılımı doğrulanmış değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 147,
-        "financialScore": 51,
-        "totalScore": 198
-      }
-    },
-    {
-      "name": "VeloxiaTech",
-      "normalizedName": "veloxiatech",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 3.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucuların eğitim ve sektör deneyimi görünür ancak çok güçlü seviye için geçmiş büyük başarılar net değil.",
-        "C": "3 – Ürün/çözüm teknoloji odağında güçlü ancak toplumsal fayda veya çeşitlilik uygulamalarına dair açık bilgi yok.",
-        "D": "3 – VeloxiaTech’de ekip görünür, ancak şeffaflık ve tutarlılık konusunda detaylı kamuya açık içerik sınırlı.",
-        "E": "3 – Teknoloji odaklı girişim, yerel startup programlarında ve etkinliklerde yer almıştır.",
-        "F": "3 – Ürün ve teknoloji mevcut ancak büyüme ve operasyonel tempo sınırlı ilerliyor.",
-        "G": "3 – Teknoloji ürünü stratejik satın almaya açık ancak net global alıcı listesi sınırlı.",
-        "H": "3 – Başlangıç seviyesi yatırım ve/veya destek programlarıyla ilerliyor.",
-        "I": "3 – Yatırım tarihi eski değil ancak yeni tur veya agresif büyüme sinyali sınırlı.",
-        "J": "3 – Erken aşama yatırımcı profili mevcut, ancak bilinen büyük fon yer almıyor.",
-        "K": "3 – Mevcut yatırımcıların şirkette kaldığı görülüyor fakat tekrar yatırım bilgisi sınırlı.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 137,
-        "financialScore": 51,
-        "totalScore": 188
-      }
-    },
-    {
-      "name": "Teamfluencer",
-      "normalizedName": "teamfluencer",
-      "scores": {
-        "B": 1.0,
-        "C": 1.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 3.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu CEO’nun güçlü eğitim geçmişi ve uluslararası tanınırlığı, yüksek liderlik ve vizyon kapasitesine işaret ediyor.",
-        "C": "5 – Şirket “women-led” vurgusu ile faaliyetlerini tanıtıyor ve kadın odaklı hedeflerle ilgili somut kampanyalar yürütüyor.  ",
-        "D": "5 – Teamfluencer LinkedIn ve tanıtım sayfalarında ekip üyeleri ve roller net; iletişim açık ve tutarlı.",
-        "E": "3 – Influencer marketing alanında aktif müşteri kullanımı ve sektör bilinirliği oluşmuştur.",
-        "F": "3 – Platform aktif fakat büyüme adımları ve ürün güncellemeleri sınırlı hızda.",
-        "G": "5 – Influencer marketing alanında global ajans ve platformlara (Publicis, WPP vb.) güçlü exit yolu var.",
-        "H": "3 – Melek yatırım ve erken aşama fonlarla desteklenmiş, büyük tur henüz yok.",
-        "I": "3 – Son yatırım sonrası operasyonlar devam ediyor, ancak hızlı ölçeklenme duyuruları yok.",
-        "J": "3 – Melek yatırımcılar ve sektör içi bireyler var, global VC henüz yok.",
-        "K": "3 – Erken yatırımcılar destek veriyor ancak follow-on tur katılımı net değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 101,
-        "financialScore": 57,
-        "totalScore": 158
-      }
-    },
-    {
-      "name": "Heybooster",
-      "normalizedName": "heybooster",
-      "scores": {
-        "B": 3.0,
-        "C": 3.0,
-        "D": 1.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 1.0,
-        "I": 1.0,
-        "J": 1.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "1 – Kurucunun geçmişi, eğitimi ve önceki başarılarına dair doğrulanabilir kamusal bilgi bulunamadı.",
-        "C": "1 – Şirketin kamuya açık tanıtımında VC değerlerine denk düşen (kapsayıcılık, toplumsal fayda) herhangi bir kanıt çıkmadı.",
-        "D": "1 – Heybooster için kamuya açık şeffaf ekip bilgisi ve iletişim yapısı bulunmuyor.",
-        "E": "3 – Growth odaklı B2B girişim, yerel startup çevrelerinde tanınmaktadır.",
-        "F": "3 – Ürün tanımı net, ancak kamuya açık hızlı ölçeklenme göstergesi yok.",
-        "G": "3 – B2B growth ürünü, exit mümkün ancak ölçek kritik eşikte değil.",
-        "H": "1 – Kamuya açık yatırım bilgisi bulunmuyor; bootstrapped ilerliyor.",
-        "I": "1 – Yakın dönemde yatırım haberi yok, runway konusunda dışarıdan pozitif sinyal alınamıyor.",
-        "J": "1 – Kurumsal veya tanınmış yatırımcı bilgisi bulunmuyor.",
-        "K": "1 – Yatırımcı bulunmadığı için follow-on durumu söz konusu değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 91,
-        "financialScore": 23,
-        "totalScore": 114
-      }
-    },
-    {
-      "name": "Boby.ai (TR)",
-      "normalizedName": "bobyai",
-      "scores": {
-        "B": 5.0,
-        "C": 3.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 5.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu ekibin daha önce girişim kurmuş olması ve yatırım almış olması, yüksek deneyim ve ilerleme kapasitesi gösteriyor.",
-        "C": "3 – Ürün/teknoloji güçlü görünse de misyon/metinlerde toplumsal etki ile ilgili net bir vurgu yok.",
-        "D": "5 – Boby.ai’nin kurucu ve yönetim ekip bilgileri açık, yatırımcı ve takım iletişimi net.",
-        "E": "5 – Girişim 1.5M USD seed yatırım almış; London Venture Partners gibi fonlar tarafından desteklenmiştir.",
-        "F": "5 – Yatırım sonrası ürün geliştirme, ekip büyümesi ve pazara açılma adımları net.",
-        "G": "5 – Consumer AI ürünleri büyük teknoloji şirketleri için doğrudan satın alma hedefi olabilir.",
-        "H": "5 – Seed turunda anlamlı büyüklükte yatırım almış ve bilinen fonlar tarafından desteklenmiş.",
-        "I": "5 – Yakın zamanda yatırım almış ve sonrasında ekip/ürün büyümesi açıkça görülüyor.",
-        "J": "5 – Bilinen VC fonları ve uluslararası yatırımcılar yatırımcı listesinde yer alıyor.",
-        "K": "5 – İlk tur yatırımcılarının sonraki turlara tekrar katıldığı açıkça duyurulmuş.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 161,
-        "financialScore": 85,
-        "totalScore": 246
-      }
-    },
-    {
-      "name": "FutureVerde",
-      "normalizedName": "futureverde",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 3.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucu ekibin teknik ve yönetim profili net olsa da büyük ölçekli exit veya ödül gibi güçlü kanıtlar sınırlı.",
-        "C": "3 – Şirket/ekip sayfası var ama çeşitlilik veya toplumsal fayda odağı konusunda açıklama yok.",
-        "D": "3 – FutureVerde’de ekip bilgisi erişilebilir ancak şeffaf ilişki/iletişim konusunda net veri sınırlı.",
-        "E": "3 – Sürdürülebilirlik odağında girişim, impact ve green-tech topluluklarında görünürlük kazanmıştır.",
-        "F": "3 – Ürün mevcut ancak müşteri kazanımı ve operasyonel genişleme sınırlı görünüyor.",
-        "G": "3 – Sürdürülebilirlik odağı var ancak exit için regülasyon ve ölçek belirleyici.",
-        "H": "3 – Erken aşama veya proje bazlı yatırım almış, henüz büyük fon girişi yok.",
-        "I": "3 – Son yatırım üzerinden zaman geçmiş, ancak operasyonlar halen aktif.",
-        "J": "3 – Sınırlı sayıda erken aşama yatırımcı mevcut, fon kalitesi orta seviyede.",
-        "K": "3 – Mevcut yatırımcılar şirkette yer alıyor, ancak ek yatırım bilgisi paylaşılmamış.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 137,
-        "financialScore": 51,
-        "totalScore": 188
-      }
-    },
-    {
-      "name": "Cellsway",
-      "normalizedName": "cellsway",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 1.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 1.0,
-        "I": 1.0,
-        "J": 1.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "1 – Kurucu ve ekip geçmişine dair kamuya açık, doğrulanabilir bilgi bulunamadığı için düşük puan verildi.",
-        "C": "1 – Kamuya açık bilgi kayıtlarında, VC değerleri çerçevesinde (çeşitlilik/etki) referans bulunmuyor.",
-        "D": "1 – Cellsway’de ekip bilgileri kamuya açık kaynaklarda yetersiz bulunduğu için puan düşük.",
-        "E": "3 – Deep-tech odaklı girişim, AR-GE ve teknoloji ekosisteminde bilinirlik elde etmiştir.",
-        "F": "3 – Teknoloji geliştirme aşamasında, operasyonel ölçeklenme henüz erken.",
-        "G": "3 – Derin teknoloji alanı exit potansiyeline sahip fakat uzun vadeli AR-GE gerektiriyor.",
-        "H": "1 – Kamuya yansıyan yatırım turu bulunmuyor.",
-        "I": "1 – Kamuya yansıyan yakın dönem yatırım veya finansal rahatlık göstergesi yok.",
-        "J": "1 – Kamuya açık yatırımcı bilgisi yok veya yatırımcı profili zayıf.",
-        "K": "1 – Yatırımcı olmadığı için follow-on değerlendirmesi yapılamıyor.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 123,
-        "financialScore": 23,
-        "totalScore": 146
-      }
-    },
-    {
-      "name": "Cuebric (Foreign)",
-      "normalizedName": "cuebric",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 5.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu CEO’nun alanla uyumlu geçmişi ve net liderlik profili, güçlü founder gücünü destekliyor.",
-        "C": "5 – Şirket liderleri ve iletişim kanalları üzerinde çeşitlilik ve kapsayıcılık vurgusu açık bir şekilde yer alıyor.",
-        "D": "5 – Cuebric’de ekip yapısı ve kurucu bilgileri net; takımın misyonu ve iletişim tutarlı görünüyor.",
-        "E": "5 – Girişim NVIDIA ve yaratıcı teknoloji ekosistemlerinde aktif olarak yer almıştır.",
-        "F": "5 – Ürün global pazarda aktif, yeni özellikler ve iş birlikleriyle düzenli ilerleme var.",
-        "G": "5 – Media & AI kesişiminde Adobe, Netflix benzeri stratejik alıcılar net.",
-        "H": "5 – Global yatırımcılardan anlamlı sermaye girişi sağlanmış.",
-        "I": "5 – Son yatırım yakın dönemde alınmış, global açılım ve yeni planlar duyurulmuş.",
-        "J": "5 – Global ölçekte tanınan fonlar ve stratejik yatırımcılar tarafından destekleniyor.",
-        "K": "5 – Mevcut yatırımcıların yeni turlara katılımı ve pro-rata kullanımı doğrulanmış.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 85,
-        "totalScore": 260
-      }
-    },
-    {
-      "name": "Pyrosense",
-      "normalizedName": "pyrosense",
-      "scores": {
-        "B": 1.0,
-        "C": 1.0,
-        "D": 1.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 1.0,
-        "I": 1.0,
-        "J": 1.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "1 – Kurucu geçmişi ve eğitim bilgileri kamuya açık kaynaklarda doğrulanamadığı için puan düşük tutuldu.",
-        "C": "1 – Şirket tanıtımında toplumsal fayda veya kapsayıcılık ile ilgili bilgi bulunamadı.",
-        "D": "1 – Pyrosense’e dair ekip/şeffaf iletişimle ilgili yalnızca sınırlı bilgi mevcut; detay yok.",
-        "E": "3 – Endüstriyel sensör teknolojisi alanında sektörel tanınırlık kazanmıştır.",
-        "F": "3 – Ürün ve ekip mevcut ancak operasyonel büyüme yavaş.",
-        "G": "3 – Endüstriyel çözüm olsa da exit için büyük kurumsal entegrasyon gerekir.",
-        "H": "1 – Yatırım aldığına dair doğrulanabilir bilgi yok.",
-        "I": "1 – Son yatırım tarihi belirsiz veya çok eski, runway hakkında olumlu sinyal yok.",
-        "J": "1 – Yatırımcı bilgisi kamuya açık değil veya sadece bireysel destek var.",
-        "K": "1 – Yatırım bulunmadığı için follow-on yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 59,
-        "financialScore": 23,
-        "totalScore": 82
-      }
-    },
-    {
-      "name": "Mindra",
-      "normalizedName": "mindra",
-      "scores": {
-        "B": 1.0,
-        "C": 1.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 5.0,
-        "L": null
-      },
-      "notes": {
-        "B": "1 – Kurucu ve ekip bilgileri sınırlı ve doğrulanabilir güçlü geçmiş verisi bulunmuyor.",
-        "C": "1 – Kamuya açık kaynaklarda bu metrikle ilgili kanıt yok.",
-        "D": "5 – Mindra’da yönetim ve ekip bilgileri LinkedIn gibi kaynaklarda net; güvenilir ve tutarlı.",
-        "E": "5 – Girişim TQ Ventures’dan 1.2M USD pre-seed yatırım aldı; bu, global yatırımcı ilgisinin somut bir göstergesidir.",
-        "F": "5 – Yatırım sonrası ürün roadmap’i uygulanmış ve ekip genişletilmiş.",
-        "G": "5 – AI altyapı şirketleri için global Big Tech exit senaryosu güçlü.",
-        "H": "5 – Pre-seed/seed seviyesinde güçlü fonlardan yatırım almış.",
-        "I": "5 – Yakın dönemde yatırım almış ve ürün geliştirme hızlanmış durumda.",
-        "J": "5 – Güçlü ve bilinen VC fonları yatırımcılar arasında yer alıyor.",
-        "K": "5 – Seed/pre-seed yatırımcılarının sonraki turlarda tekrar yer aldığı biliniyor.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 111,
-        "financialScore": 85,
-        "totalScore": 196
-      }
-    },
-    {
-      "name": "Opinion AI",
-      "normalizedName": "opinionai",
-      "scores": {
-        "B": 1.0,
-        "C": 1.0,
-        "D": 3.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 1.0,
-        "I": 1.0,
-        "J": 1.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "1 – Kurucuya ait eğitim, deneyim veya önceki başarılar hakkında erişilebilir veri olmadığı için puan düşük.",
-        "C": "1 – Erişilebilir kaynaklarda çeşitlilik/etki temasını bulmak mümkün değil.",
-        "D": "3 – Opinion AI’da ekip görünümüne ulaşılabiliyor ancak şeffaf iletişim veya tutarlılık hakkında çok az içerik var.",
-        "E": "3 – Veri ve analitik alanında faaliyet gösteren girişim, AI topluluklarında görünürdür.",
-        "F": "3 – Ürün tanımı var ancak operasyonel ivme sınırlı.",
-        "G": "3 – Veri/analitik ürünü exit’e uygun ancak pazarda rekabet yoğun.",
-        "H": "1 – Kamuya açık yatırım bilgisi bulunmuyor.",
-        "I": "1 – Son yatırım tarihi belirsiz, finansal sürdürülebilirlik dışarıdan okunamıyor.",
-        "J": "1 – Kurumsal yatırımcıya dair doğrulanabilir bilgi yok.",
-        "K": "1 – Yatırımcı olmadığı için follow-on söz konusu değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 73,
-        "financialScore": 23,
-        "totalScore": 96
-      }
-    },
-    {
-      "name": "Sorwe AI",
-      "normalizedName": "sorweai",
-      "scores": {
-        "B": 3.0,
-        "C": 3.0,
-        "D": 3.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – CEO’nun eğitim ve yönetim geçmişi kamuya açık şekilde net ve liderlik görünürlüğü yüksek.",
-        "C": "3 – Şirket tanımı şirket misyonu olarak teknoloji odaklı ancak toplumsal fayda anlatımı yok.",
-        "D": "3 – Sorwe AI’de ekip profilleri mevcut ancak şeffaf ve düzenli iletişim hakkında net veri yok.",
-        "E": "3 – HR-tech ekosisteminde bilinirliği olan girişim, yerel ve bölgesel ağlarda yer almaktadır.",
-        "F": "3 – Kurumsal ürün mevcut fakat büyüme hızı kontrollü ilerliyor.",
-        "G": "3 – HR tech alanında exit mümkün fakat pazarda çok sayıda benzer oyuncu var.",
-        "H": "3 – Erken aşama yatırım veya hızlandırıcı desteği almış.",
-        "I": "3 – Son yatırım çok eski değil, ancak yeni tur hazırlığına dair net işaret yok.",
-        "J": "3 – Yerel fonlar ve deneyimli melek yatırımcılar bulunuyor.",
-        "K": "3 – Erken yatırımcıların şirkette kalmaya devam ettiği görülüyor, ek tur net değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 105,
-        "financialScore": 51,
-        "totalScore": 156
-      }
-    },
-    {
-      "name": "Twiser",
-      "normalizedName": "twiser",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucu ve yönetici ekip görünür olsa da güçlü seviye için önceki exit veya büyük ölçekli başarı kanıtı sınırlı.",
-        "C": "3 – Bazı ekip üyeleri tanımlı ancak VC değerlerine göre toplumsal etki hedefi açıklanmamış.",
-        "D": "5 – Twiser’da ekip yapısı ve iletişim kanalları açık şekilde paylaşılmış; tutarlı bir yapı var.",
-        "E": "5 – HR SaaS alanında yatırımcıların aktif olduğu programlar ve fonlarla çalışmıştır.",
-        "F": "5 – Ürün pazarda aktif, müşteri portföyü ve operasyonel yapı hızla büyüyor.",
-        "G": "5 – HR SaaS pazarında LinkedIn, SAP, Workday gibi net alıcılar mevcut.",
-        "H": "3 – Seed öncesi sınırlı yatırım ile ilerliyor.",
-        "I": "3 – Yatırım sonrası bir süre geçmiş olsa da operasyonel tempo korunuyor.",
-        "J": "3 – Erken aşama fonlar mevcut, ancak üst segment VC yok.",
-        "K": "3 – İlk yatırımcıların ilişkisi sürüyor, ancak tekrar yatırım açıkça duyurulmamış.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 57,
-        "totalScore": 232
-      }
-    },
-    {
-      "name": "Eventiqs (TR)",
-      "normalizedName": "eventiqs",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu ortağın daha önce CEO olarak görev yapmış olması, güçlü yönetim ve dayanıklılık göstergesi.",
-        "C": "5 – Şirket iletişimlerinde çalışan çeşitliliği ve toplumsal fayda hedefleri net olarak ifade ediliyor.",
-        "D": "5 – Eventiqs’de yönetici ve ekip bilgileri açık; şeffaf iletişim ve rol dağılımı görülebiliyor.",
-        "E": "5 – Event-tech alanında global örneklerle benzer konumlanma ve yatırımcı ilgisi mevcuttur.",
-        "F": "5 – Etkinlik ve müşteri yönetimi ürünleri aktif kullanılıyor, ilerleme hızı yüksek.",
-        "G": "5 – Event-tech alanında Cvent, Eventbrite gibi geçmiş exit emsalleri güçlü.",
-        "H": "3 – Erken aşama fonlama mevcut, ancak büyük tur yapılmamış.",
-        "I": "3 – Son yatırım sonrası sınırlı ama devam eden büyüme sinyalleri mevcut.",
-        "J": "3 – Program yatırımcıları ve küçük fonlar yer alıyor.",
-        "K": "3 – Mevcut yatırımcılar sonraki turlarda pasif kalmış, net follow-on bilgisi yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 57,
-        "totalScore": 232
-      }
-    },
-    {
-      "name": "Hirize",
-      "normalizedName": "hirize",
-      "scores": {
-        "B": 3.0,
-        "C": 3.0,
-        "D": 3.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu CEO’nun uluslararası eğitim geçmişi ve girişimin yolculuğunu anlatan doğrulanabilir içerikler güçlü.",
-        "C": "5 – Ürün/misyon açıklamalarında kapsayıcılık ve toplumsal fayda odakları yazılı ve ekip yapısı buna uygun.",
-        "D": "3 – Hirize’de ekip bilgisi var ancak işleyiş/şeffaf süreçlerle ilgili detay sınırlı.",
-        "E": "5 – Recruitment teknolojileri alanında yatırımcı ve kurumsal müşteri ilgisi oluşmuştur.",
-        "F": "5 – Kurumsal müşteri kazanımı ve ürün yayılımı ile güçlü operasyonel tempo var.",
-        "G": "5 – HR & recruitment alanında global platformlara net satın alma senaryosu var.",
-        "H": "3 – Erken aşama yatırım ve program destekleriyle ilerliyor.",
-        "I": "3 – Yatırımın üzerinden zaman geçmiş, runway orta seviyede okunuyor.",
-        "J": "3 – Melek ve hızlandırıcı destekleri mevcut, fon kalitesi orta.",
-        "K": "3 – Program/melek yatırımcılar ilişkisini sürdürüyor, ek yatırım teyitli değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 129,
-        "financialScore": 57,
-        "totalScore": 186
-      }
-    },
-    {
-      "name": "MondayHero",
-      "normalizedName": "mondayhero",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucu ekip ve eğitim bilgileri erişilebilir ancak çok güçlü seviye için geçmiş büyük başarılar net değil.",
-        "C": "3 – Ürün odağı teknoloji olsa da toplumsal fayda ile ilgili bir açıklama yer almıyor.",
-        "D": "5 – MondayHero’nun tanıtım sayfalarında ekip rolleri ve iletişim net biçimde yer alıyor.",
-        "E": "5 – Productivity SaaS alanında global yatırımcıların ilgi gösterdiği bir segmentte yer almaktadır.",
-        "F": "5 – Ürün sürekli güncelleniyor, ekip ve müşteri tarafında net ilerleme görülüyor.",
-        "G": "5 – Productivity SaaS alanında Atlassian, Monday.com benzeri exit örnekleri mevcut.",
-        "H": "3 – Seed aşamasına yakın yatırım alınmış, ancak henüz büyük ölçekli değil.",
-        "I": "3 – Son yatırım sonrası ürün ve ekip büyümesi var ancak yeni tur duyurusu yok.",
-        "J": "3 – Erken aşama yatırımcılar var, büyük fon henüz yok.",
-        "K": "3 – Erken yatırımcılar şirkette kalıyor, ancak yeni tura katılım bilgisi sınırlı.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 57,
-        "totalScore": 232
-      }
-    },
-    {
-      "name": "MassiveBio (Foreign)",
-      "normalizedName": "massivebio",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 5.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – CEO’nun ileri düzey teknik/akademik geçmişi ve uzun danışmanlık deneyimi, güçlü founder profili sunuyor.",
-        "C": "5 – Şirket içi uygulamalarda toplumsal fayda ve kapsayıcılık öncelenmiş gibi metinler bulunuyor.",
-        "D": "5 – MassiveBio’da liderlik ve ekip bilgileri açık; düzenli paylaşımlar team dinamiğine işaret ediyor.",
-        "E": "5 – Health-tech ve biyoteknoloji yatırımcılarının aktif olduğu pazarda konumlanmıştır.",
-        "F": "5 – Sağlık sektöründe aktif operasyonlar ve uluslararası genişleme mevcut.",
-        "G": "5 – Health-tech alanında ilaç ve biyoteknoloji şirketleri için güçlü M&A potansiyeli bulunuyor.",
-        "H": "5 – Yüksek tutarlı yatırım turlarıyla güçlü sermaye yapısı oluşturmuş.",
-        "I": "5 – Yakın dönemde yatırım almış ve agresif büyüme adımları atıyor.",
-        "J": "5 – Sağlık ve biyoteknoloji alanında global ve saygın fonlar yatırımcı.",
-        "K": "5 – Mevcut yatırımcıların sonraki büyük turlara aktif katılımı kamuya açık.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 85,
-        "totalScore": 260
-      }
-    },
-    {
-      "name": "Momento",
-      "normalizedName": "momento",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 3.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucunun üst düzey eğitim geçmişi ve aldığı girişimcilik ödülleri, yüksek vizyon ve liderlik kapasitesi gösteriyor.",
-        "C": "5 – Şirket misyonunda çeşitlilik ve kapsayıcılık net şekilde ifade edilmiş.",
-        "D": "3 – Momento’da ekip bilgisi erişilebilir ancak şeffaflık ve takım dinamiği yönünde fazla içerik yok.",
-        "E": "5 – Consumer ürün olarak geniş kullanıcı kitlesi ve ekosistem görünürlüğü elde etmiştir.",
-        "F": "5 – Ürün pazarda güçlü konumlanmış, ekip ve operasyon düzenli büyüyor.",
-        "G": "5 – Consumer/productivity alanında global platformlara exit yolu açık.",
-        "H": "3 – Erken aşama yatırım ve gelirle birlikte ilerliyor.",
-        "I": "3 – Son yatırım görece eski, ancak gelir/operasyon devam ediyor.",
-        "J": "3 – Yerel ve sektörel yatırımcılar ağırlıklı.",
-        "K": "3 – İlk yatırımcıların destek verdiği biliniyor, ancak ek tur teyidi yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 161,
-        "financialScore": 57,
-        "totalScore": 218
-      }
-    },
-    {
-      "name": "Biotekno",
-      "normalizedName": "biotekno",
-      "scores": {
-        "B": 3.0,
-        "C": 3.0,
-        "D": 3.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 1.0,
-        "I": 1.0,
-        "J": 1.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Şirket uzun süredir faaliyet gösteriyor ancak startup bağlamında kurucuya ait güçlü başarı hikâyesi sınırlı.",
-        "C": "3 – Misyon/metin teknoloji odaklı, toplumsal fayda vurgusu yok.",
-        "D": "3 – Biotekno’da ekip profili var ama şeffaf iletişim ve tutarlılık hakkında detay bulunmuyor.",
-        "E": "3 – Endüstriyel teknoloji ekosisteminde yerel tanınırlık kazanmıştır.",
-        "F": "3 – Ürün mevcut fakat ölçeklenme ve operasyonel hız sınırlı.",
-        "G": "3 – Endüstriyel çözüm exit’e uygun ancak daha çok yerel/stratejik alıcılarla sınırlı.",
-        "H": "1 – Yatırım almadan, operasyonel gelirle ilerliyor.",
-        "I": "1 – Yakın dönem yatırım bilgisi yok, runway konusunda belirsizlik yüksek.",
-        "J": "1 – Yatırımcı bilgisi yok veya tamamen bootstrapped.",
-        "K": "1 – Yatırımcı olmadığı için follow-on durumu yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 105,
-        "financialScore": 23,
-        "totalScore": 128
-      }
-    },
-    {
-      "name": "Virgosol (TR)",
-      "normalizedName": "virgosol",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 5.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu CEO’nun aldığı ödüller ve kamuya açık liderlik faaliyetleri, güçlü founder gücünü destekliyor.",
-        "C": "5 – Pazar içi iletişimlerde “insan/etki odaklı” ifadeler bulunuyor.",
-        "D": "5 – Virgosol’da ekip ve yönetim açıkça paylaşılmış, iletişim tutarlılığı yüksek gözüküyor.",
-        "E": "5 – Clean-tech alanında enerji sektörü yatırımcılarıyla temas ve görünürlük mevcuttur.",
-        "F": "5 – Yenilenebilir enerji projeleri sahada uygulanıyor ve operasyon aktif.",
-        "G": "5 – Clean-tech alanında enerji devlerine (Shell, Total, Siemens) exit potansiyeli yüksek.",
-        "H": "5 – Clean-tech odağında güçlü yatırımcılar tarafından fonlanmış.",
-        "I": "5 – Son yatırım yakın dönemde alınmış ve sahadaki projeler aktif şekilde ilerliyor.",
-        "J": "5 – Enerji ve clean-tech alanında tanınmış kurumsal yatırımcılar mevcut.",
-        "K": "5 – İlk yatırımcıların sonraki turlarda tekrar yatırım yaptığı açıkça belirtilmiş.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 85,
-        "totalScore": 260
-      }
-    },
-    {
-      "name": "JobzMall",
-      "normalizedName": "jobzmall",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu ekibin kamuya açık tanınırlığı ve lider profilleri, yüksek vizyon ve deneyim seviyesine işaret ediyor.",
-        "C": "5 – Şirket kurumsal mesajlarında kapsayıcılık ve toplumsal fayda yer alıyor.",
-        "D": "5 – JobzMall’da ekip rolleri ve kurucu geçmişi net; şeffaf ve tutarlı bilgi mevcut.",
-        "E": "5 – HR marketplace modeline yönelik yatırımcı ilgisi bulunan bir pazarda faaliyet göstermektedir.",
-        "F": "5 – İşe alım ve müşteri kazanımıyla operasyonel yapı hızla büyüyor.",
-        "G": "5 – HR marketplace modeli global platformlar için satın alınabilir yapıda.",
-        "H": "3 – Erken aşama yatırım veya melek desteği mevcut.",
-        "I": "3 – Yatırım tarihi eski değil, ancak yeni finansman sinyali sınırlı.",
-        "J": "3 – Yerel yatırımcılar ve bireysel fonlayıcılar var.",
-        "K": "3 – Erken yatırımcılar şirkette kalıyor, ancak ek yatırım bilgisi sınırlı.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 57,
-        "totalScore": 232
-      }
-    },
-    {
-      "name": "Playable Factory (TR)",
-      "normalizedName": "playablefactory",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu CEO’nun sektörel deneyimi ve ölçekleme tecrübesi kamuya açık kaynaklarla doğrulanabiliyor.",
-        "C": "5 – Ürün ve ekip tanıtımlarında VC değerleri ile uyumlu ifadeler mevcut.",
-        "D": "5 – Playable Factory’da ekip profilleri açık, kampanya ve topluluk iletişimleri düzenli.",
-        "E": "5 – Oyun ve interaktif medya ekosistemlerinde aktif olarak yer almıştır.",
-        "F": "5 – Oyun/deneyim ürünleri yayında ve yeni projelerle ilerleme sürüyor.",
-        "G": "5 – Gaming & interactive media alanında global stüdyolara güçlü exit senaryosu var.",
-        "H": "3 – Proje bazlı veya erken aşama fonlama ile ilerliyor.",
-        "I": "3 – Son yatırım sonrası istikrarlı ama yavaş ilerleme görülüyor.",
-        "J": "3 – Erken aşama fonlar ve sektörel melekler bulunuyor.",
-        "K": "3 – Mevcut yatırımcılar ilişkisini sürdürüyor, follow-on teyidi yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 57,
-        "totalScore": 232
-      }
-    },
-    {
-      "name": "Adin.AI (TR)",
-      "normalizedName": "adinai",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 5.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu CEO’nun önemli teknoloji başarıları ve düzenli liderlik paylaşımları güçlü founder profili oluşturuyor.",
-        "C": "5 – Misyon ve ekip yapısı toplumsal fayda odaklı mesajı içeriyor.",
-        "D": "5 – Adin.AI’da yönetim ekip bilgileri şeffaf şekilde paylaşılmış ve iletişim açık.",
-        "E": "5 – AI SaaS alanında yatırımcıların yoğun ilgi gösterdiği bir dikeyde konumlanmıştır.",
-        "F": "5 – AI ürünleri aktif müşterilerde kullanılıyor ve ekip genişliyor.",
-        "G": "5 – AI SaaS ürünleri Big Tech ve büyük SaaS şirketleri için net hedef.",
-        "H": "5 – AI odaklı güçlü yatırım turları tamamlanmış.",
-        "I": "5 – Yakın dönemde yatırım almış ve büyüme planları kamuya açık.",
-        "J": "5 – Global AI ve teknoloji fonları yatırımcı listesinde yer alıyor.",
-        "K": "5 – Önceki yatırımcıların sonraki turlara katılımı doğrulanmış.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 85,
-        "totalScore": 260
-      }
-    },
-    {
-      "name": "Düşyeri (Uppy)",
-      "normalizedName": "dusyeri",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucunun uzun yıllara dayanan girişimcilik geçmişi ve önceki başarılı marka inşası güçlü kanıt sunuyor.",
-        "C": "3 – Ürün/çözüm güçlü ancak toplumsal etki ile ilgili somut ibareler yok.",
-        "D": "5 – Düşyeri (Uppy) topluluk iletişimi ve kurucu ekip bilgileri net; güven ve tutarlılık var.",
-        "E": "5 – Medya ve çocuk içeriği alanında uzun süredir güçlü ekosistem doğrulaması bulunmaktadır.",
-        "F": "5 – İçerik ve ürün ekosistemi uzun süredir aktif ve sürekli gelişiyor.",
-        "G": "5 – Çocuk içerik ve IP üretimi, medya grupları için güçlü satın alma potansiyeli taşıyor.",
-        "H": "3 – Uzun süredir yatırım almadan veya küçük yatırımlarla büyüyor.",
-        "I": "3 – Uzun süredir yatırım almadan operasyonel olarak devam ediyor.",
-        "J": "3 – Uzun süredir bootstrapped, yatırımcı profili sınırlı.",
-        "K": "3 – Uzun süredir aynı yatırımcı yapısı var, ek yatırım duyurusu yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 57,
-        "totalScore": 232
-      }
-    },
-    {
-      "name": "Masraff",
-      "normalizedName": "masraff",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucu CEO ve kurumsal iş birlikleri görünür olsa da büyük exit veya ödül ölçeği net değil.",
-        "C": "5 – İletişim ve misyon metinlerinde çeşitlilik ve kapsayıcılık vurgusu bulunuyor.",
-        "D": "3 – Masraff’ta ekip bilgisi var ancak şeffaflığı gösterecek geniş içerik sınırlı.",
-        "E": "3 – Fintech SaaS alanında yerel ekosistem bilinirliği oluşmuştur.",
-        "F": "3 – Kurumsal ürün mevcut ancak büyüme adımları temkinli ilerliyor.",
-        "G": "3 – Fintech SaaS exit’e uygun ancak regülasyon ve ölçek belirleyici.",
-        "H": "3 – Erken aşama fonlama ile ilerliyor, büyük tur yok.",
-        "I": "3 – Son yatırım üzerinden zaman geçmiş, runway orta seviyede.",
-        "J": "3 – Erken aşama yatırımcılar mevcut, ancak üst düzey fon yok.",
-        "K": "3 – Mevcut yatırımcılar şirkette kalıyor, yeni tur katılımı net değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 165,
-        "financialScore": 51,
-        "totalScore": 216
-      }
-    },
-    {
-      "name": "Ollang (Foreign)",
-      "normalizedName": "ollang",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 5.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu ekibin teknik geçmişi ve uluslararası seçilme başarısı güçlü founder gücü göstergesi.",
-        "C": "5 – Ürün/şirket anlatımında VC değerleri kapsamı ile uyumlu hedefler açık.",
-        "D": "5 – Ollang’da ekip profilleri ve takım rolleri erişilebilir; güven veren bir yapı var.",
-        "E": "5 – Global SaaS ve AI ekosistemlerinde görünürlük kazanmıştır.",
-        "F": "5 – Ürün pazarda aktif, global programlar ve müşteri kazanımı ile ilerliyor.",
-        "G": "5 – SaaS ve AI alanında ABD/AB merkezli stratejik alıcılara açık.",
-        "H": "5 – Global fonlardan yatırım almış, sermaye yapısı güçlü.",
-        "I": "5 – Yakın tarihli yatırım sonrası ürün ve ekip ölçekleniyor.",
-        "J": "5 – Global VC fonları ve uluslararası yatırımcılar destek veriyor.",
-        "K": "5 – Mevcut yatırımcıların ek turlara katılımı ve pro-rata kullanımı açık.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 85,
-        "totalScore": 260
-      }
-    },
-    {
-      "name": "Blindlook",
-      "normalizedName": "blindlook",
-      "scores": {
-        "B": 3.0,
-        "C": 3.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 3.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucu hikâyesi ve sosyal etki odaklı vizyonu kamuya açık şekilde net.",
-        "C": "5 – Şirket tanıtımında kapsayıcılık ve etki öncelenmiş şekilde yazılıyor.",
-        "D": "5 – Blindlook’da kurucu/ekip bilgileri net; takım dinamiği ve iletişim tutarlı.",
-        "E": "5 – Sosyal etki ve erişilebilirlik odaklı girişim olarak uluslararası ağlarda tanınmaktadır.",
-        "F": "5 – Sosyal etki odaklı ürün aktif kullanıcılarla çalışıyor ve büyüyor.",
-        "G": "5 – Sosyal etki + erişilebilirlik odağı, global markalar için anlamlı satın alma hedefi olabilir.",
-        "H": "3 – Sosyal etki odaklı erken aşama yatırım almış.",
-        "I": "3 – Son yatırım çok eski değil, ancak yeni tur sinyali net değil.",
-        "J": "3 – Sosyal etki odaklı, niş yatırımcılar ağırlıklı.",
-        "K": "3 – Erken yatırımcılar destek vermeye devam ediyor, follow-on net değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 143,
-        "financialScore": 57,
-        "totalScore": 200
-      }
-    },
-    {
-      "name": "Jobtogo",
-      "normalizedName": "jobtogo",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 1.0,
-        "I": 1.0,
-        "J": 1.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucu ekibin eğitim ve ilerleme bilgileri görünür ancak çok güçlü seviye için büyük ölçekli başarı sınırlı.",
-        "C": "3 – Misyon/metin teknoloji odaklı, toplumsal etki yönü net değil.",
-        "D": "3 – Jobtogo’da ekip üyeleri bulunabiliyor ancak şeffaf süreç ve tutarlılık konusunda geniş veri yok.",
-        "E": "3 – HR platformları alanında sınırlı fakat istikrarlı ekosistem görünürlüğü vardır.",
-        "F": "3 – Ürün mevcut ancak operasyonel ölçeklenme sınırlı.",
-        "G": "3 – HR marketplace exit potansiyeline sahip ancak ölçek kritik.",
-        "H": "1 – Yatırım bilgisi kamuya açık değil.",
-        "I": "1 – Son yatırım bilgisi belirsiz veya çok eski, finansal rahatlık göstergesi yok.",
-        "J": "1 – Kurumsal yatırımcı bilgisi bulunmuyor.",
-        "K": "1 – Yatırımcı bulunmadığı için follow-on yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 165,
-        "financialScore": 23,
-        "totalScore": 188
-      }
-    },
-    {
-      "name": "wiCow",
-      "normalizedName": "wicow",
-      "scores": {
-        "B": 3.0,
-        "C": 3.0,
-        "D": 3.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 1.0,
-        "I": 1.0,
-        "J": 1.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucu hikâyesi ve teknik ekip bilgisi erişilebilir olsa da global ölçekte büyük başarı kanıtı net değil.",
-        "C": "3 – Ekip ve ürün görünür ama VC değerlerine ilişkin somut açıklama yok.",
-        "D": "3 – wiCow’da ekip bilgisi var ama açık, detaylı şeffaf iletişim içerikleri sınırlı.",
-        "E": "3 – Agri-tech alanında yatırımcı ilgisinin bulunduğu erken aşama segmentte konumlanmıştır.",
-        "F": "3 – Tarım teknolojisi ürünü sahada test ediliyor, büyüme kademeli.",
-        "G": "3 – Agri-tech alanında exit mümkün fakat daha uzun vadeli.",
-        "H": "1 – Yatırım almadan veya çok sınırlı fonla ilerliyor.",
-        "I": "1 – Yatırım alınmamış veya çok uzun süredir yeni finansman yok.",
-        "J": "1 – Yatırımcı profili zayıf veya tamamen bireysel.",
-        "K": "1 – Yatırımcı olmadığı veya tek seferlik destek olduğu için follow-on yok.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 105,
-        "financialScore": 23,
-        "totalScore": 128
-      }
-    },
-    {
-      "name": "Ming",
-      "normalizedName": "ming",
-      "scores": {
-        "B": 3.0,
-        "C": 3.0,
-        "D": 3.0,
-        "E": 3.0,
-        "F": 3.0,
-        "G": 3.0,
-        "H": 1.0,
-        "I": 1.0,
-        "J": 1.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "3 – Kurucunun eğitim ve ürün odağı görünür ancak geçmiş büyük ölçekli başarı veya exit kanıtı sınırlı.",
-        "C": "3 – Şirket tanıtımı teknik odaklı; kapsayıcılık/etki unsurları eksik görünüyor.",
-        "D": "3 – Ming’de ekip bilgisi erişilebilir ancak tutarlılık ve şeffaflık detayları kısıtlı.",
-        "E": "3 – Consumer uygulama ekosisteminde bilinirliği olan ancak yoğun rekabet içeren bir pazardadır.",
-        "F": "3 – Ürün yayında ancak operasyonel genişleme yavaş ilerliyor.",
-        "G": "3 – Consumer app exit’e açık ancak pazarda yoğun rekabet bulunuyor.",
-        "H": "1 – Kamuya açık yatırım turu bilgisi bulunmuyor.",
-        "I": "1 – Son yatırım tarihi belirsiz, runway konusunda dışarıdan olumlu sinyal yok.",
-        "J": "1 – Yatırımcı bilgisi kamuya açık değil veya yatırım alınmamış.",
-        "K": "1 – Yatırım alınmadığı için follow-on değerlendirmesi yapılamıyor.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 105,
-        "financialScore": 23,
-        "totalScore": 128
-      }
-    },
-    {
-      "name": "Refabric",
-      "normalizedName": "refabric",
-      "scores": {
-        "B": 5.0,
-        "C": 5.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 5.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Refabric; moda tasarım ve AI kesişiminde başarılı kurucular tarafından kuruldu ve global moda devleriyle programlara seçilerek güçlü bir vizyon gösteriyor.",
-        "C": "5 – Refabric sürdürülebilir moda tasarımı ve atık azaltma hedefleri ile toplumsal fayda ve çevresel duyarlılığa odaklanıyor.",
-        "D": "5 – Şirket web sitesi ve paylaşımlarında ekip bilgileri, ortaklıklar ve tutarlı iletişimle güven veren bir yapı sergileniyor.",
-        "E": "5 – 1500+ başvuru arasından LVMH’nin La Maison des Startups programına seçilmiş ve global moda markalarıyla partnerlik sağlıyor.",
-        "F": "5 – 1.16M USD yatırım turunu kapatmış, global moda şirketleriyle erken iş birliklerine başlamış ve ürün geliştirmeyi sürdürüyor.",
-        "G": "5 – Moda teknoloji segmentinde stratejik alıcılar (Google, Adobe, Shopify, moda devleri LVMH) için çekici bir IP/ürün portföyü var.",
-        "H": "5 – Refabric, 1.16M USD tohum öncesi yatırım almıştır; bu, startup için önemli bir sermaye göstergesidir.",
-        "I": "5 – 2024 Ağustos’ta yatırım kapanışı ve devam eden program ilişkileri yakın runway ve finansal momentum sinyali veriyor.",
-        "J": "5 – Yatırımcılar arasında Saran Holding, Pelin Akın, Yahya Ülker gibi deneyimli isimler bulunuyor.",
-        "K": "3 – Şu ana kadar ilk yatırım turu sonrası follow-on yatırım bildirimi yok; ancak global program üyeliği fırsat yaratabilir. (mevcut veriyle)",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 175,
-        "financialScore": 83,
-        "totalScore": 258
-      }
-    },
-    {
-      "name": "Crait",
-      "normalizedName": "crait",
-      "scores": {
-        "B": 5.0,
-        "C": 3.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 3.0,
-        "H": 3.0,
-        "I": 3.0,
-        "J": 5.0,
-        "K": 1.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Crait’in kurucuları Safiye Dinçtürk Turgut ve Kaan Aytekin, e-ticaret ve AI ürün geliştirme odaklı güçlü bir teknik/vizyon geçmişi ile startup’ı yönetiyor.",
-        "C": "3 – Ürün odaklı teknoloji geliştirse de kapsayıcılık veya toplumsal fayda odaklı bir misyon ifadesi mevcut değil.",
-        "D": "5 – LinkedIn ve kamuya açık profiller kurumsal ekip ve iletişim netliği gösteriyor.",
-        "E": "5 – 380K USD tohum öncesi yatırım almış, melek yatırımcı ve İş Bankası 100. Yıl Girişim Sermayesi gibi ekosistem aktörlerinden destek görüyor.",
-        "F": "5 – Ürün aktif, müşteriler (Karaca, Otacı vb.) ile iş birlikleri ve pazarlama kanıtları bulunuyor.",
-        "G": "3 – AI-görsel üretim segmenti çekici olmasına rağmen henüz global stratejik M&A için belirgin dış kanıt yok.",
-        "H": "3 – 380K USD tohum öncesi yatırım almış; bu erken aşamada olumlu ancak yüksek ölçekli değil.",
-        "I": "3 – Son yatırım 2023 sonunda gerçekleşmiş; sonrasında güçlü büyüme haberleri sınırlı.",
-        "J": "5 – Yatırımcılar arasında İş Bankası 100. Yıl Girişim Sermayesi ve tanınmış melek yatırımcılar bulunuyor.",
-        "K": "1 – Şu an mevcut yatırım sonrası yeni yatırım turu veya follow-on bildirilmiş değil.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 161,
-        "financialScore": 59,
-        "totalScore": 220
-      }
-    },
-    {
-      "name": "Dataroid",
-      "normalizedName": "dataroid",
-      "scores": {
-        "B": 5.0,
-        "C": 3.0,
-        "D": 5.0,
-        "E": 5.0,
-        "F": 5.0,
-        "G": 3.0,
-        "H": 5.0,
-        "I": 5.0,
-        "J": 5.0,
-        "K": 3.0,
-        "L": null
-      },
-      "notes": {
-        "B": "5 – Kurucuların (Fatih İşbecer, Elif Parlak, Can Elmas) liderliğinde finans ve veri analitiği alanında deneyimli bir ekip var; uluslararası büyüme hedefleri gösteriyor.",
-        "C": "3 – Şirketin kamuya açık mesajlarında kapsayıcılık veya toplumsal fayda vurgusu yok; ürün ticari ve analitik odaklı.",
-        "D": "5 – LinkedIn gibi platformlarda ekip bilgisi, net iletişim ve şeffaf rol dağılımı görünüyor.",
-        "E": "5 – Tacirler Portföy FinAI, Tacirler Gelecek Etki GSYF ve Endeavor Catalyst’ın katıldığı Seri A öncesi 6,6M USD yatırım aldı; bu ekosistem ilgisini doğrular.",
-        "F": "5 – 120M+ kullanıcıya dokunan kurumsal müşterilerle aktif dijital analitik platformu; G2’de “Orta Doğu lideri” olarak raporlanmış performans ve müşteri memnuniyeti sinyali var.",
-        "G": "3 – Finans/analytics SaaS segmentinde stratejik alıcı potansiyeli yüksek olsa da, şu an net M&A örneği veya belirgin alıcı sinyali yok.",
-        "H": "5 – 6.6M USD Seri A öncesi kapital ile iyi seviyede fonlanmış; ayrıca 2M USD daha önce yatırım geçmişi var.",
-        "I": "5 – Yakın tarihli (2026) 6.6M USD yatırım almış olması güçlü bir runway ve büyüme sinyali verir.",
-        "J": "5 – FinAI, Tacirler Portföy Gelecek Etki GSYF ve Endeavor Catalyst gibi yerel ve global ekosistem oyuncuları yatırımcı olarak bulunuyor.",
-        "K": "3 – İlk yatırım 2M USD ve ardından büyük Seri A öncesi tur var; net bir follow-on yatırım döngüsü kanıtı sınırlı.",
-        "L": "\"VC tarafından doldurulabilir\""
-      },
-      "computedFromExcel": {
-        "nonFinancialScore": 161,
-        "financialScore": 77,
-        "totalScore": null
-      }
-    }
-  ],
+  "candidates": [],
   "researchBacklog": [
     {
       "name": "Kalder ",
@@ -1460,47 +199,47 @@
             "formula": null
           },
           "B": {
-            "value": 9.0,
+            "value": 9,
             "formula": null
           },
           "C": {
-            "value": 7.0,
+            "value": 7,
             "formula": null
           },
           "D": {
-            "value": 7.0,
+            "value": 7,
             "formula": null
           },
           "E": {
-            "value": 7.0,
+            "value": 7,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "L": {
-            "value": 7.0,
+            "value": 7,
             "formula": null
           }
         }
@@ -1582,43 +321,43 @@
             "formula": null
           },
           "B": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "C": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "D": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -1643,43 +382,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -1704,43 +443,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "M": {
@@ -1765,43 +504,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -1826,43 +565,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -1887,43 +626,43 @@
             "formula": null
           },
           "B": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "C": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -1948,43 +687,43 @@
             "formula": null
           },
           "B": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "I": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "J": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -2009,43 +748,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "M": {
@@ -2070,43 +809,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -2131,43 +870,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "I": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "J": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -2192,43 +931,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "M": {
@@ -2253,43 +992,43 @@
             "formula": null
           },
           "B": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "C": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "D": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "I": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "J": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -2314,43 +1053,43 @@
             "formula": null
           },
           "B": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "C": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "M": {
@@ -2375,43 +1114,43 @@
             "formula": null
           },
           "B": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "C": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "I": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "J": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -2436,43 +1175,43 @@
             "formula": null
           },
           "B": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -2497,43 +1236,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -2558,43 +1297,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -2619,43 +1358,43 @@
             "formula": null
           },
           "B": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -2680,43 +1419,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -2741,43 +1480,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "M": {
@@ -2802,43 +1541,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -2863,43 +1602,43 @@
             "formula": null
           },
           "B": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "I": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "J": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -2924,43 +1663,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "M": {
@@ -2985,43 +1724,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -3046,43 +1785,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -3107,43 +1846,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "M": {
@@ -3168,43 +1907,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -3229,43 +1968,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -3290,43 +2029,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "M": {
@@ -3351,43 +2090,43 @@
             "formula": null
           },
           "B": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -3412,43 +2151,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "I": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "J": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -3473,43 +2212,43 @@
             "formula": null
           },
           "B": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "I": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "J": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -3534,43 +2273,43 @@
             "formula": null
           },
           "B": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "E": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "F": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "I": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "J": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -3595,43 +2334,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {
@@ -3656,43 +2395,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "I": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 1.0,
+            "value": 1,
             "formula": null
           },
           "M": {
@@ -3717,43 +2456,43 @@
             "formula": null
           },
           "B": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "C": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "D": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "E": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "F": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "G": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "H": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "I": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "J": {
-            "value": 5.0,
+            "value": 5,
             "formula": null
           },
           "K": {
-            "value": 3.0,
+            "value": 3,
             "formula": null
           },
           "M": {

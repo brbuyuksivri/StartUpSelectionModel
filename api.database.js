@@ -3,6 +3,7 @@ const path = require('node:path');
 const { Pool } = require('pg');
 const { DATA_FILE, DATABASE_CONFIG, HAS_DATABASE_URL, ROOT } = require('./api.config');
 const { computePortfolio } = require('./scoring-core');
+const metricModel = require('./metric-model');
 
 const pool = DATABASE_CONFIG ? new Pool(DATABASE_CONFIG) : null;
 let initPromise = null;
@@ -11,30 +12,130 @@ const NEW_STARTUP_DRAFT_PREFIX = 'new-startup:';
 
 function readSeed() {
   const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+  const model = metricModel.normalizeModel(raw.model || {});
   return {
     source: raw.source || null,
-    model: raw.model,
-    candidates: raw.candidates || [],
+    model,
+    candidates: (raw.candidates || []).map((candidate, index) => metricModel.normalizeCandidate(candidate, model, index)),
   };
 }
 
-function normalizeCandidate(candidate, index = null) {
+function normalizeCandidate(candidate, model, index = null) {
+  return metricModel.normalizeCandidate(candidate, model, index);
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function normalizeDetailForStorage(detail = {}) {
+  const next = detail && typeof detail === 'object' ? { ...detail } : {};
+  next.overview = next.overview && typeof next.overview === 'object' ? { ...next.overview } : {};
+  next.diligence = next.diligence && typeof next.diligence === 'object' ? { ...next.diligence } : {};
+  next.diligence.checklist = Array.isArray(next.diligence.checklist) ? next.diligence.checklist.map((item, index) => ({
+    id: String(item?.id || `task-${index + 1}`),
+    label: String(item?.label || `Task ${index + 1}`),
+    done: Boolean(item?.done),
+    owner: String(item?.owner || ''),
+  })) : [];
+  next.attachments = Array.isArray(next.attachments) ? next.attachments.map((item, index) => ({
+    id: String(item?.id || `attachment-${index + 1}`),
+    name: String(item?.name || ''),
+    url: String(item?.url || ''),
+    type: String(item?.type || ''),
+    addedAt: item?.addedAt || nowIso(),
+  })) : [];
+  next.history = Array.isArray(next.history) ? next.history.map((entry, index) => ({
+    id: String(entry?.id || `history-${index + 1}`),
+    type: String(entry?.type || 'update'),
+    text: String(entry?.text || ''),
+    at: entry?.at || nowIso(),
+  })).filter((entry) => entry.text) : [];
+  return next;
+}
+
+function historyEntry(type, text) {
   return {
-    id: candidate.id || `seed_${index ?? Math.random().toString(36).slice(2, 8)}`,
-    sourceIndex: candidate.sourceIndex ?? index,
-    name: candidate.name || 'Unnamed candidate',
-    normalizedName: candidate.normalizedName || '',
-    scores: candidate.scores || {},
-    externalScores: candidate.externalScores || {},
-    aiScores: candidate.aiScores || {},
-    aiRationales: candidate.aiRationales || {},
-    notes: candidate.notes || {},
-    computedFromExcel: candidate.computedFromExcel || null,
-    isNew: Boolean(candidate.isNew),
-    tags: Array.isArray(candidate.tags) ? candidate.tags : [],
-    stage: candidate.stage || 'sourcing',
-    lastAiEvaluationId: candidate.lastAiEvaluationId || null,
+    id: `history-${Math.random().toString(36).slice(2, 10)}`,
+    type,
+    text,
+    at: nowIso(),
   };
+}
+
+function arraysEqual(a = [], b = []) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function buildActivityEntries(current, next, patch) {
+  const entries = [];
+  const currentDetail = normalizeDetailForStorage(current?.detail || {});
+  const nextDetail = normalizeDetailForStorage(next?.detail || {});
+
+  if (!current?.id) {
+    entries.push(historyEntry('system', `Startup created: ${next.name}.`));
+    return entries;
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'stage') && current.stage !== next.stage) {
+    entries.push(historyEntry('stage', `Stage changed from ${current.stage || 'unknown'} to ${next.stage}.`));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'tags') && !arraysEqual(current.tags || [], next.tags || [])) {
+    entries.push(historyEntry('tags', `Tags updated: ${(next.tags || []).join(', ') || 'none'}.`));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'scores') && JSON.stringify(current.scores || {}) !== JSON.stringify(next.scores || {})) {
+    entries.push(historyEntry('scores', 'Analyst scores updated.'));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'externalScores') && JSON.stringify(current.externalScores || {}) !== JSON.stringify(next.externalScores || {})) {
+    entries.push(historyEntry('external-scores', 'External evaluator scores updated.'));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'aiScores') && JSON.stringify(current.aiScores || {}) !== JSON.stringify(next.aiScores || {})) {
+    entries.push(historyEntry('ai-scores', 'AI scores updated.'));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'notes') && JSON.stringify(current.notes || {}) !== JSON.stringify(next.notes || {})) {
+    entries.push(historyEntry('notes', 'Analyst notes updated.'));
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'detail')) {
+    if ((currentDetail.overview?.owner || '') !== (nextDetail.overview?.owner || '')) {
+      entries.push(historyEntry('owner', `Owner set to ${nextDetail.overview?.owner || 'unassigned'}.`));
+    }
+    if ((currentDetail.overview?.nextStep || '') !== (nextDetail.overview?.nextStep || '')) {
+      entries.push(historyEntry('next-step', `Next step updated to ${nextDetail.overview?.nextStep || 'none'}.`));
+    }
+    if ((currentDetail.overview?.summary || '') !== (nextDetail.overview?.summary || '')) {
+      entries.push(historyEntry('overview', 'Startup summary updated.'));
+    }
+    if ((currentDetail.overview?.thesis || '') !== (nextDetail.overview?.thesis || '')) {
+      entries.push(historyEntry('thesis', 'Investment thesis updated.'));
+    }
+    if ((currentDetail.diligence?.status || '') !== (nextDetail.diligence?.status || '')) {
+      entries.push(historyEntry('diligence', `Diligence status changed to ${nextDetail.diligence?.status || 'not-started'}.`));
+    }
+    if (JSON.stringify(currentDetail.diligence?.checklist || []) !== JSON.stringify(nextDetail.diligence?.checklist || [])) {
+      entries.push(historyEntry('diligence', 'Diligence checklist updated.'));
+    }
+    if ((currentDetail.diligence?.notes || '') !== (nextDetail.diligence?.notes || '')) {
+      entries.push(historyEntry('diligence', 'Diligence notes updated.'));
+    }
+    if (JSON.stringify(currentDetail.attachments || []) !== JSON.stringify(nextDetail.attachments || [])) {
+      entries.push(historyEntry('attachments', 'Attachments updated.'));
+    }
+  }
+  return entries;
+}
+
+function mergeCandidateForUpdate(current, patch) {
+  const merged = {
+    ...current,
+    ...patch,
+    detail: patch.detail ? normalizeDetailForStorage(patch.detail) : normalizeDetailForStorage(current.detail || {}),
+  };
+  const existingHistory = normalizeDetailForStorage(merged.detail).history;
+  const serverEntries = buildActivityEntries(current, merged, patch);
+  merged.detail = {
+    ...normalizeDetailForStorage(merged.detail),
+    history: [...serverEntries, ...existingHistory].slice(0, 100),
+  };
+  return merged;
 }
 
 async function query(sql, params = []) {
@@ -131,13 +232,13 @@ async function seedDbWithClient(client) {
     await client.query('DELETE FROM evaluations');
     await client.query('DELETE FROM workflow_drafts');
     for (const [index, rawCandidate] of seed.candidates.entries()) {
-      const candidate = normalizeCandidate(rawCandidate, index);
+      const candidate = normalizeCandidate(rawCandidate, seed.model, index);
       await client.query(`
         INSERT INTO candidates (
           id, source_index, name, normalized_name, scores_json, external_scores_json,
           ai_scores_json, ai_rationales_json, notes_json,
-          computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
-        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14)
+          computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id, detail_json
+        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14,$15::jsonb)
       `, [
         candidate.id,
         candidate.sourceIndex,
@@ -153,6 +254,7 @@ async function seedDbWithClient(client) {
         JSON.stringify(candidate.tags),
         candidate.stage,
         candidate.lastAiEvaluationId,
+        JSON.stringify(candidate.detail || null),
       ]);
     }
 
@@ -247,8 +349,8 @@ async function initDb() {
 }
 
 async function readSnapshot() {
-  const model = await getConfigValue('model');
   const source = await getConfigValue('source');
+  const model = metricModel.normalizeModel(await getConfigValue('model'));
   const [legacyDraft, prefixedDrafts] = await Promise.all([
     getWorkflowDraft(NEW_STARTUP_DRAFT_KEY),
     listWorkflowDrafts(NEW_STARTUP_DRAFT_PREFIX),
@@ -271,12 +373,12 @@ async function readSnapshot() {
   const { rows } = await query(`
     SELECT id, source_index, name, normalized_name, scores_json, external_scores_json,
            ai_scores_json, ai_rationales_json, notes_json,
-           computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
+           computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id, detail_json
     FROM candidates
     ORDER BY COALESCE(source_index, 999999), name
   `);
 
-  const candidates = rows.map((row) => ({
+  const candidates = rows.map((row, index) => normalizeCandidate({
     id: row.id,
     sourceIndex: row.source_index,
     name: row.name,
@@ -291,7 +393,8 @@ async function readSnapshot() {
     tags: row.tags_json || [],
     stage: row.stage || 'sourcing',
     lastAiEvaluationId: row.last_ai_evaluation_id || null,
-  }));
+    detail: row.detail_json || null,
+  }, model, index));
 
   return {
     source,
@@ -305,19 +408,20 @@ async function readSnapshot() {
 
 async function saveSnapshot(snapshot) {
   if (!snapshot?.model || !Array.isArray(snapshot?.candidates)) throw new Error('Invalid snapshot payload');
+  const normalizedModel = metricModel.normalizeModel(snapshot.model);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['model', JSON.stringify(snapshot.model)]);
+    await client.query('INSERT INTO app_config (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value', ['model', JSON.stringify(normalizedModel)]);
     await client.query('DELETE FROM candidates');
     for (const [index, rawCandidate] of snapshot.candidates.entries()) {
-      const candidate = normalizeCandidate(rawCandidate, index);
+      const candidate = normalizeCandidate(rawCandidate, normalizedModel, index);
       await client.query(`
         INSERT INTO candidates (
           id, source_index, name, normalized_name, scores_json, external_scores_json,
           ai_scores_json, ai_rationales_json, notes_json,
-          computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
-        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14)
+          computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id, detail_json
+        ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14,$15::jsonb)
       `, [
         candidate.id,
         candidate.sourceIndex,
@@ -333,6 +437,7 @@ async function saveSnapshot(snapshot) {
         JSON.stringify(candidate.tags),
         candidate.stage,
         candidate.lastAiEvaluationId,
+        JSON.stringify(candidate.detail || null),
       ]);
     }
     await client.query(`
@@ -340,13 +445,13 @@ async function saveSnapshot(snapshot) {
       VALUES ('default-scorecard', 'Default VC Scorecard', TRUE, $1::jsonb)
       ON CONFLICT (id) DO UPDATE
       SET config_json = EXCLUDED.config_json, is_active = EXCLUDED.is_active
-    `, [JSON.stringify(snapshot.model)]);
+    `, [JSON.stringify(normalizedModel)]);
     await client.query(`
       INSERT INTO weight_sets (id, name, is_active, weights_json)
       VALUES ('default-weights', 'Default Weights', TRUE, $1::jsonb)
       ON CONFLICT (id) DO UPDATE
       SET weights_json = EXCLUDED.weights_json, is_active = EXCLUDED.is_active
-    `, [JSON.stringify(snapshot.model.weights || [])]);
+    `, [JSON.stringify(normalizedModel.weights || [])]);
     if (Array.isArray(snapshot.newStartupDrafts)) {
       await deleteWorkflowDraftsByPrefix(NEW_STARTUP_DRAFT_PREFIX, client);
       await saveWorkflowDraft(NEW_STARTUP_DRAFT_KEY, null, client);
@@ -382,14 +487,57 @@ async function listCandidates() {
   return snapshot.candidates;
 }
 
-async function saveCandidate(candidate) {
-  const normalized = normalizeCandidate(candidate);
+async function loadCandidateForMutation(id) {
+  if (!id) return null;
+  const { rows } = await query(`
+    SELECT id, source_index, name, normalized_name, scores_json, external_scores_json,
+           ai_scores_json, ai_rationales_json, notes_json,
+           computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id, detail_json
+    FROM candidates
+    WHERE id = $1
+    LIMIT 1
+  `, [id]);
+  if (!rows[0]) return null;
+  return {
+    id: rows[0].id,
+    sourceIndex: rows[0].source_index,
+    name: rows[0].name,
+    normalizedName: rows[0].normalized_name || '',
+    scores: rows[0].scores_json || {},
+    externalScores: rows[0].external_scores_json || {},
+    aiScores: rows[0].ai_scores_json || {},
+    aiRationales: rows[0].ai_rationales_json || {},
+    notes: rows[0].notes_json || {},
+    computedFromExcel: rows[0].computed_from_excel_json || null,
+    isNew: Boolean(rows[0].is_new),
+    tags: rows[0].tags_json || [],
+    stage: rows[0].stage || 'sourcing',
+    lastAiEvaluationId: rows[0].last_ai_evaluation_id || null,
+    detail: rows[0].detail_json || null,
+  };
+}
+
+async function saveCandidate(candidate, modelOverride = null, currentOverride = undefined) {
+  const model = modelOverride || metricModel.normalizeModel(await getConfigValue('model'));
+  const current = currentOverride === undefined ? await loadCandidateForMutation(candidate?.id) : currentOverride;
+  let normalized = normalizeCandidate({
+    ...candidate,
+    detail: normalizeDetailForStorage(candidate.detail || {}),
+  }, model);
+  if (current) {
+    normalized = normalizeCandidate(mergeCandidateForUpdate(current, normalized), model);
+  } else if (!normalized.detail?.history?.length) {
+    normalized.detail = {
+      ...normalizeDetailForStorage(normalized.detail),
+      history: [historyEntry('system', `Startup created: ${normalized.name}.`)],
+    };
+  }
   await query(`
     INSERT INTO candidates (
       id, source_index, name, normalized_name, scores_json, external_scores_json,
       ai_scores_json, ai_rationales_json, notes_json,
-      computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
-    ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14)
+      computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id, detail_json
+    ) VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13,$14,$15::jsonb)
     ON CONFLICT (id) DO UPDATE SET
       source_index = EXCLUDED.source_index,
       name = EXCLUDED.name,
@@ -403,7 +551,8 @@ async function saveCandidate(candidate) {
       is_new = EXCLUDED.is_new,
       tags_json = EXCLUDED.tags_json,
       stage = EXCLUDED.stage,
-      last_ai_evaluation_id = EXCLUDED.last_ai_evaluation_id
+      last_ai_evaluation_id = EXCLUDED.last_ai_evaluation_id,
+      detail_json = EXCLUDED.detail_json
   `, [
     normalized.id,
     normalized.sourceIndex,
@@ -419,43 +568,20 @@ async function saveCandidate(candidate) {
     JSON.stringify(normalized.tags),
     normalized.stage,
     normalized.lastAiEvaluationId,
+    JSON.stringify(normalized.detail || null),
   ]);
   return normalized;
 }
 
 async function updateCandidate(id, patch) {
-  const { rows } = await query(`
-    SELECT id, source_index, name, normalized_name, scores_json, external_scores_json,
-           ai_scores_json, ai_rationales_json, notes_json,
-           computed_from_excel_json, is_new, tags_json, stage, last_ai_evaluation_id
-    FROM candidates
-    WHERE id = $1
-    LIMIT 1
-  `, [id]);
-  if (!rows[0]) throw new Error('Startup not found');
+  const model = metricModel.normalizeModel(await getConfigValue('model'));
+  const current = await loadCandidateForMutation(id);
+  if (!current) throw new Error('Startup not found');
 
-  const current = {
-    id: rows[0].id,
-    sourceIndex: rows[0].source_index,
-    name: rows[0].name,
-    normalizedName: rows[0].normalized_name || '',
-    scores: rows[0].scores_json || {},
-    externalScores: rows[0].external_scores_json || {},
-    aiScores: rows[0].ai_scores_json || {},
-    aiRationales: rows[0].ai_rationales_json || {},
-    notes: rows[0].notes_json || {},
-    computedFromExcel: rows[0].computed_from_excel_json || null,
-    isNew: Boolean(rows[0].is_new),
-    tags: rows[0].tags_json || [],
-    stage: rows[0].stage || 'sourcing',
-    lastAiEvaluationId: rows[0].last_ai_evaluation_id || null,
-  };
-
-  return saveCandidate({
-    ...current,
+  return saveCandidate(mergeCandidateForUpdate(current, {
     ...patch,
     id: current.id,
-  });
+  }), model, null);
 }
 
 async function deleteCandidate(id) {
@@ -484,15 +610,14 @@ async function listWeightSets() {
 
 async function applyWeights(draftWeights) {
   const snapshot = await readSnapshot();
-  const currentWeights = snapshot.model.weights || [];
-  const nextWeights = currentWeights.map((metric) => ({
+  const nextMetrics = (snapshot.model.metrics || []).map((metric) => ({
     ...metric,
     weight: Number(draftWeights[metric.column] ?? metric.weight) || 0,
   }));
-  const nextModel = {
+  const nextModel = metricModel.normalizeModel({
     ...snapshot.model,
-    weights: nextWeights,
-  };
+    metrics: nextMetrics,
+  });
 
   await query('UPDATE app_config SET value = $2 WHERE key = $1', ['model', JSON.stringify(nextModel)]);
   await query(`
@@ -502,9 +627,31 @@ async function applyWeights(draftWeights) {
     SET weights_json = EXCLUDED.weights_json,
         is_active = EXCLUDED.is_active,
         updated_at = NOW()
-  `, [JSON.stringify(nextWeights)]);
+  `, [JSON.stringify(nextModel.weights || [])]);
 
-  return nextWeights;
+  return nextModel.weights;
+}
+
+async function saveModel(model) {
+  const normalizedModel = metricModel.normalizeModel(model);
+  await query('UPDATE app_config SET value = $2 WHERE key = $1', ['model', JSON.stringify(normalizedModel)]);
+  await query(`
+    INSERT INTO scorecards (id, name, is_active, config_json)
+    VALUES ('default-scorecard', 'Default VC Scorecard', TRUE, $1::jsonb)
+    ON CONFLICT (id) DO UPDATE
+    SET config_json = EXCLUDED.config_json,
+        is_active = EXCLUDED.is_active,
+        updated_at = NOW()
+  `, [JSON.stringify(normalizedModel)]);
+  await query(`
+    INSERT INTO weight_sets (id, name, is_active, weights_json)
+    VALUES ('default-weights', 'Default Weights', TRUE, $1::jsonb)
+    ON CONFLICT (id) DO UPDATE
+    SET weights_json = EXCLUDED.weights_json,
+        is_active = EXCLUDED.is_active,
+        updated_at = NOW()
+  `, [JSON.stringify(normalizedModel.weights || [])]);
+  return normalizedModel;
 }
 
 async function saveEvaluation(evaluation) {
@@ -651,6 +798,7 @@ module.exports = {
   listScorecards,
   listWeightSets,
   applyWeights,
+  saveModel,
   saveEvaluation,
   listEvaluations,
   listEvaluationJobs,

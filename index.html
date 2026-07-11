@@ -24,18 +24,17 @@
     <main class="layout">
       <aside class="sidebar card">
         <h2>Workspace</h2>
-        <p class="muted">Choose a section.</p>
+        <p class="muted">Choose your workflow.</p>
         <nav class="nav">
-          <button class="nav-btn is-active" data-pane="analysis" type="button">Analysis</button>
+          <button class="nav-btn is-active" data-pane="table" type="button">Pipeline</button>
+          <button class="nav-btn" data-pane="detail" type="button">Startup Detail</button>
+          <button class="nav-btn" data-pane="analysis" type="button">Analysis</button>
           <button class="nav-btn" data-pane="compare" type="button">Compare</button>
-          <button class="nav-btn" data-pane="new" type="button">New Startup</button>
-          <button class="nav-btn" data-pane="table" type="button">All Startups</button>
-          <button class="nav-btn" data-pane="weights" type="button">Weights & Rubrics</button>
         </nav>
       </aside>
 
       <section class="main card">
-        <section class="pane" data-pane="analysis">
+        <section class="pane" data-pane="analysis" hidden>
           <div class="section-head">
             <h2>Portfolio Analysis</h2>
             <p class="muted">Scatter first. Extra charts are optional.</p>
@@ -78,7 +77,7 @@
               </div>
               <div class="row brief-actions">
                 <button id="briefCompareBtn" class="ghost" type="button">Compare to Top</button>
-                <button id="briefPipelineBtn" class="ghost" type="button">Open in Pipeline</button>
+                <button id="briefPipelineBtn" class="ghost" type="button">Open Detail</button>
               </div>
             </div>
             <div id="selectedStartupBrief" class="selected-brief-empty">
@@ -169,6 +168,37 @@
           </details>
         </section>
 
+        <section class="pane" data-pane="detail" hidden>
+          <div class="section-head">
+            <h2>Startup Detail</h2>
+            <p class="muted">One structured record for startup overview, scores, notes, AI review, diligence, and history.</p>
+          </div>
+          <div class="card startup-record-card">
+            <div class="startup-record-toolbar">
+              <label>Startup
+                <select id="detailStartupSelect"></select>
+              </label>
+              <div class="row brief-actions">
+                <button id="detailCompareBtn" class="ghost" type="button">Compare to Top</button>
+                <button id="detailQueueBtn" class="ghost" type="button">Queue AI Review</button>
+              </div>
+            </div>
+            <div id="detailHero" class="selected-brief-empty">
+              Select a startup to open its record.
+            </div>
+            <div class="startup-record-tabs" id="detailTabs">
+              <button class="startup-record-tab is-active" type="button" data-detail-tab="overview">Overview</button>
+              <button class="startup-record-tab" type="button" data-detail-tab="scores">Scores</button>
+              <button class="startup-record-tab" type="button" data-detail-tab="notes">Notes</button>
+              <button class="startup-record-tab" type="button" data-detail-tab="ai">AI Review</button>
+              <button class="startup-record-tab" type="button" data-detail-tab="diligence">Diligence</button>
+              <button class="startup-record-tab" type="button" data-detail-tab="history">History</button>
+            </div>
+            <div id="detailStatus" class="startup-detail-edit-status" data-type="neutral">Changes save back to the model.</div>
+            <div id="detailTabPanel"></div>
+          </div>
+        </section>
+
         <section class="pane" data-pane="compare" hidden>
           <div class="section-head">
             <h2>Startup Comparison</h2>
@@ -201,12 +231,99 @@
           </div>
         </section>
 
-        <section class="pane" data-pane="new" hidden>
+        <section class="pane" data-pane="table">
           <div class="section-head">
-            <h2>New Startup</h2>
-            <p class="muted">Fill all scores and explanations before create.</p>
+            <h2>Pipeline</h2>
+            <p class="muted">Manage startups, add new records, and tune the scoring model in one workspace.</p>
           </div>
           <div class="card">
+            <div class="row between metric-editor-head">
+              <div>
+                <h3>Pipeline Table</h3>
+                <p class="muted">Search, sort, select, tag, stage, and manage the live pipeline.</p>
+              </div>
+            </div>
+            <div class="grid-4">
+              <label>Search <input id="searchInput" type="text" placeholder="Search startup" /></label>
+              <label>Sort
+                <select id="sortSelect">
+                  <option value="total-desc">Total High-Low</option>
+                  <option value="total-asc">Total Low-High</option>
+                  <option value="name-asc">Name A-Z</option>
+                  <option value="name-desc">Name Z-A</option>
+                </select>
+              </label>
+              <label>Quadrant
+                <select id="quadrantSelect">
+                  <option value="all">All</option>
+                  <option value="top-right">Top-right</option>
+                  <option value="top-left">Top-left</option>
+                  <option value="bottom-right">Bottom-right</option>
+                  <option value="bottom-left">Bottom-left</option>
+                </select>
+              </label>
+              <label>Saved View
+                <select id="savedViewSelect">
+                  <option value="all">All pipeline</option>
+                  <option value="ic-ready">IC-ready</option>
+                  <option value="needs-diligence">Needs diligence</option>
+                  <option value="financial-weak">Financial weak</option>
+                </select>
+              </label>
+            </div>
+            <div class="pipeline-toolbar">
+              <label>Saved Filters
+                <select id="pipelineFilterSelect">
+                  <option value="">Current filters</option>
+                </select>
+              </label>
+              <label>Filter Name
+                <input id="pipelineFilterName" type="text" placeholder="e.g. Partner review shortlist" />
+              </label>
+              <button id="savePipelineFilterBtn" class="ghost" type="button">Save Filters</button>
+              <button id="deletePipelineFilterBtn" class="ghost" type="button">Delete Saved Filter</button>
+              <details class="column-picker">
+                <summary>Columns</summary>
+                <div id="pipelineColumnList" class="column-picker-list"></div>
+              </details>
+            </div>
+            <div class="bulk-toolbar">
+              <label class="bulk-check">
+                <input id="selectVisibleToggle" type="checkbox" />
+                Select visible
+              </label>
+              <div id="selectionStatus" class="bulk-status">0 selected</div>
+              <label>Tag
+                <input id="bulkTagInput" type="text" placeholder="e.g. AI, Climate, Deeptech" />
+              </label>
+              <label>Stage
+                <select id="bulkStageSelect">
+                  <option value="">Choose stage</option>
+                  <option value="sourcing">Sourcing</option>
+                  <option value="diligence">Diligence</option>
+                  <option value="ic-ready">IC-ready</option>
+                  <option value="watchlist">Watchlist</option>
+                  <option value="pass">Pass</option>
+                </select>
+              </label>
+              <button id="bulkTagBtn" class="ghost" type="button">Apply Tag</button>
+              <button id="bulkStageBtn" class="ghost" type="button">Apply Stage</button>
+              <button id="bulkDeleteBtn" class="remove-btn" type="button">Delete Selected</button>
+            </div>
+            <div class="table-wrap">
+              <table id="table">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <details class="card collapsible inner" open>
+            <summary>Add Startup to Pipeline</summary>
+            <div class="section-head">
+              <h2>New Startup</h2>
+              <p class="muted">Fill all scores and explanations before create.</p>
+            </div>
             <div class="draft-library">
               <label>Resume Draft
                 <select id="newDraftPicker">
@@ -248,96 +365,15 @@
               </div>
               <pre id="guideText" class="guide"></pre>
             </details>
-          </div>
-        </section>
+          </details>
 
-        <section class="pane" data-pane="table" hidden>
-          <div class="section-head">
-            <h2>All Startups</h2>
-            <p class="muted">Search, sort, select, tag, stage, and manage the pipeline.</p>
-          </div>
-          <div class="card">
-            <div class="grid-4">
-              <label>Search <input id="searchInput" type="text" placeholder="Search startup" /></label>
-              <label>Sort
-                <select id="sortSelect">
-                  <option value="total-desc">Total High-Low</option>
-                  <option value="total-asc">Total Low-High</option>
-                  <option value="name-asc">Name A-Z</option>
-                  <option value="name-desc">Name Z-A</option>
-                </select>
-              </label>
-              <label>Quadrant
-                <select id="quadrantSelect">
-                  <option value="all">All</option>
-                  <option value="top-right">Top-right</option>
-                  <option value="top-left">Top-left</option>
-                  <option value="bottom-right">Bottom-right</option>
-                  <option value="bottom-left">Bottom-left</option>
-                </select>
-              </label>
-              <label>Saved View
-                <select id="savedViewSelect">
-                  <option value="all">All pipeline</option>
-                  <option value="ic-ready">IC-ready</option>
-                  <option value="needs-diligence">Needs diligence</option>
-                  <option value="financial-weak">Financial weak</option>
-                </select>
-              </label>
+          <details class="card collapsible inner">
+            <summary>Model Settings & Rubrics</summary>
+            <div class="section-head">
+              <h2>Weights & Rubrics</h2>
+              <p class="muted">Model controls, presets, preview, and rubric text.</p>
             </div>
-            <div class="bulk-toolbar">
-              <label class="bulk-check">
-                <input id="selectVisibleToggle" type="checkbox" />
-                Select visible
-              </label>
-              <div id="selectionStatus" class="bulk-status">0 selected</div>
-              <label>Tag
-                <input id="bulkTagInput" type="text" placeholder="e.g. AI, Climate, Deeptech" />
-              </label>
-              <label>Stage
-                <select id="bulkStageSelect">
-                  <option value="">Choose stage</option>
-                  <option value="sourcing">Sourcing</option>
-                  <option value="diligence">Diligence</option>
-                  <option value="ic-ready">IC-ready</option>
-                  <option value="watchlist">Watchlist</option>
-                  <option value="pass">Pass</option>
-                </select>
-              </label>
-              <button id="bulkTagBtn" class="ghost" type="button">Apply Tag</button>
-              <button id="bulkStageBtn" class="ghost" type="button">Apply Stage</button>
-              <button id="bulkDeleteBtn" class="remove-btn" type="button">Delete Selected</button>
-            </div>
-            <div class="table-wrap">
-              <table id="table">
-                <thead></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-            <div class="startup-detail-card">
-              <div class="row between">
-                <div>
-                  <h3>Startup Detail</h3>
-                  <p class="muted">Open one startup to review notes, metric rationale, and next actions.</p>
-                </div>
-                <div class="row brief-actions">
-                  <button id="tableDetailCompareBtn" class="ghost" type="button">Compare to Top</button>
-                  <button id="tableDetailQueueBtn" class="ghost" type="button">Queue AI Review</button>
-                </div>
-              </div>
-              <div id="tableDetailPanel" class="selected-brief-empty">
-                Select a startup row to inspect its pipeline detail.
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="pane" data-pane="weights" hidden>
-          <div class="section-head">
-            <h2>Weights & Rubrics</h2>
-            <p class="muted">Model controls, presets, preview, and rubric text.</p>
-          </div>
-          <div class="grid-2">
+            <div class="grid-2">
             <div class="card weights-card">
               <div class="weights-governance">
                 <div class="weights-preset-row">
@@ -357,16 +393,80 @@
               <div id="weightsContainer"></div>
             </div>
             <div class="card">
+              <div class="row between metric-editor-head">
+                <h3>Metric Editor</h3>
+                <button id="addMetricBtn" class="ghost" type="button">Add Metric</button>
+              </div>
               <label>Metric <select id="rubricMetric"></select></label>
+              <div class="metric-editor-grid">
+                <label>Metric Name <input id="metricNameInput" type="text" placeholder="e.g. Product & Differentiation" /></label>
+                <label>Default Weight <input id="metricWeightInput" type="number" step="0.1" min="0" /></label>
+                <label>Section
+                  <select id="metricSectionInput">
+                    <option value="foundation">Foundation</option>
+                    <option value="commercial">Commercial</option>
+                    <option value="scale">Team & Scale</option>
+                    <option value="capital">Capital & Strategy</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </label>
+                <label>Scatter Group
+                  <select id="metricGroupInput">
+                    <option value="nonFinancial">Non-financial</option>
+                    <option value="financial">Financial</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+              </div>
+              <label>Evidence Prompts
+                <textarea id="metricPromptsInput" rows="6" placeholder="One evidence prompt per line"></textarea>
+              </label>
+              <div class="metric-score-grid">
+                <label>Score 1 <textarea id="metricScore1" rows="3"></textarea></label>
+                <label>Score 2 <textarea id="metricScore2" rows="3"></textarea></label>
+                <label>Score 3 <textarea id="metricScore3" rows="3"></textarea></label>
+                <label>Score 4 <textarea id="metricScore4" rows="3"></textarea></label>
+                <label>Score 5 <textarea id="metricScore5" rows="3"></textarea></label>
+              </div>
+              <div class="row actions">
+                <button id="moveMetricUpBtn" class="ghost" type="button">Move Up</button>
+                <button id="moveMetricDownBtn" class="ghost" type="button">Move Down</button>
+                <button id="deleteMetricBtn" class="remove-btn" type="button">Delete Metric</button>
+                <button id="saveMetricBtn" type="button">Save Metric</button>
+              </div>
+              <div id="metricEditorStatus" class="draft-status">Select a metric to edit or add a new one.</div>
               <pre id="rubricText" class="guide"></pre>
+              <div class="section-admin">
+                <div class="row between metric-editor-head">
+                  <h3>Section Editor</h3>
+                  <button id="addSectionBtn" class="ghost" type="button">Add Section</button>
+                </div>
+                <label>Section <select id="sectionEditorSelect"></select></label>
+                <div class="metric-editor-grid">
+                  <label>Section Title <input id="sectionNameInput" type="text" placeholder="e.g. Team & Scale" /></label>
+                  <label>Section Key <input id="sectionKeyInput" type="text" readonly /></label>
+                </div>
+                <label>Section Guidance
+                  <textarea id="sectionDescriptionInput" rows="4" placeholder="Explain what analysts should focus on inside this section."></textarea>
+                </label>
+                <div class="row actions">
+                  <button id="moveSectionUpBtn" class="ghost" type="button">Move Up</button>
+                  <button id="moveSectionDownBtn" class="ghost" type="button">Move Down</button>
+                  <button id="deleteSectionBtn" class="remove-btn" type="button">Delete Section</button>
+                  <button id="saveSectionBtn" type="button">Save Section</button>
+                </div>
+                <div id="sectionEditorStatus" class="draft-status">Select a section to edit or add a new one.</div>
+              </div>
             </div>
-          </div>
+            </div>
+          </details>
         </section>
       </section>
     </main>
   </div>
 
   <script src="./scoring-core.js"></script>
+  <script src="./metric-model.js"></script>
   <script type="module" src="./client.js?v=20260709-production-arch-2"></script>
 </body>
 </html>

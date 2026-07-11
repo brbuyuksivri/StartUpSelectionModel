@@ -6,12 +6,13 @@ const RESET_URL = '/api/reset';
 const SNAPSHOT_URL = '/api/snapshot';
 const STARTUPS_URL = '/api/startups';
 const DRAFTS_URL = '/api/drafts';
+const MODEL_URL = '/api/model';
 const ANALYTICS_PORTFOLIO_URL = '/api/analytics/portfolio';
 const EVALUATION_JOBS_URL = '/api/evaluation-jobs';
 const EVALUATIONS_URL = '/api/evaluations';
 const WEIGHTS_PREVIEW_URL = '/api/weights/preview';
 const WEIGHTS_APPLY_URL = '/api/weights/apply';
-const STORAGE_KEY = 'vc-scouting-model-ui-v2';
+const STORAGE_KEY = 'vc-scouting-model-ui-v4-empty-startups';
 const NEW_DRAFT_DEFAULTS = Object.freeze({
   draftId: '',
   name: '',
@@ -22,17 +23,19 @@ const NEW_DRAFT_DEFAULTS = Object.freeze({
 });
 const NEW_STARTUP_DRAFT_PREFIX = 'new-startup:';
 const scoringCore = globalThis.VCScoringCore;
+const metricModel = globalThis.VCMetricModel;
 const SCORE_OPTIONS = ['', 1, 2, 3, 4, 5];
-const METRIC_NAME_LIST = [
-  'Ekip Yapısı',
-  'Ürün',
-  'Ticarileşme',
-  'İş Modeli',
-  'Büyüme Potansiyeli (Ölçeklenebilme & Globalleşme)',
-  'Pazar & Rakipler',
-  'Finansallar',
-  'Çıkış Stratejisi',
-];
+const SUPPORTED_PANES = new Set(['table', 'detail', 'analysis', 'compare']);
+const PIPELINE_COLUMN_OPTIONS = Object.freeze([
+  { key: 'owner', label: 'Owner' },
+  { key: 'tags', label: 'Tags' },
+  { key: 'stage', label: 'Stage' },
+  { key: 'nonFin', label: 'Non-Fin' },
+  { key: 'fin', label: 'Fin' },
+  { key: 'total', label: 'Total' },
+  { key: 'quadrant', label: 'Quadrant' },
+  { key: 'lastActivity', label: 'Last Activity' },
+]);
 
 const els = {
   panes: [...document.querySelectorAll('.pane')],
@@ -65,6 +68,13 @@ const els = {
   analysisActionBoard: document.getElementById('analysisActionBoard'),
   briefCompareBtn: document.getElementById('briefCompareBtn'),
   briefPipelineBtn: document.getElementById('briefPipelineBtn'),
+  detailStartupSelect: document.getElementById('detailStartupSelect'),
+  detailCompareBtn: document.getElementById('detailCompareBtn'),
+  detailQueueBtn: document.getElementById('detailQueueBtn'),
+  detailHero: document.getElementById('detailHero'),
+  detailTabs: document.getElementById('detailTabs'),
+  detailStatus: document.getElementById('detailStatus'),
+  detailTabPanel: document.getElementById('detailTabPanel'),
   aiStartupSelect: document.getElementById('aiStartupSelect'),
   aiQueueBtn: document.getElementById('aiQueueBtn'),
   aiProcessNextBtn: document.getElementById('aiProcessNextBtn'),
@@ -107,6 +117,11 @@ const els = {
   sortSelect: document.getElementById('sortSelect'),
   quadrantSelect: document.getElementById('quadrantSelect'),
   savedViewSelect: document.getElementById('savedViewSelect'),
+  pipelineFilterSelect: document.getElementById('pipelineFilterSelect'),
+  pipelineFilterName: document.getElementById('pipelineFilterName'),
+  savePipelineFilterBtn: document.getElementById('savePipelineFilterBtn'),
+  deletePipelineFilterBtn: document.getElementById('deletePipelineFilterBtn'),
+  pipelineColumnList: document.getElementById('pipelineColumnList'),
   selectVisibleToggle: document.getElementById('selectVisibleToggle'),
   selectionStatus: document.getElementById('selectionStatus'),
   bulkTagInput: document.getElementById('bulkTagInput'),
@@ -115,9 +130,6 @@ const els = {
   bulkStageBtn: document.getElementById('bulkStageBtn'),
   bulkDeleteBtn: document.getElementById('bulkDeleteBtn'),
   table: document.getElementById('table'),
-  tableDetailPanel: document.getElementById('tableDetailPanel'),
-  tableDetailCompareBtn: document.getElementById('tableDetailCompareBtn'),
-  tableDetailQueueBtn: document.getElementById('tableDetailQueueBtn'),
 
   weightsContainer: document.getElementById('weightsContainer'),
   presetSelect: document.getElementById('presetSelect'),
@@ -126,6 +138,32 @@ const els = {
   applyWeightsBtn: document.getElementById('applyWeightsBtn'),
   weightPreviewSummary: document.getElementById('weightPreviewSummary'),
   rubricMetric: document.getElementById('rubricMetric'),
+  addMetricBtn: document.getElementById('addMetricBtn'),
+  metricNameInput: document.getElementById('metricNameInput'),
+  metricWeightInput: document.getElementById('metricWeightInput'),
+  metricSectionInput: document.getElementById('metricSectionInput'),
+  metricGroupInput: document.getElementById('metricGroupInput'),
+  metricPromptsInput: document.getElementById('metricPromptsInput'),
+  metricScore1: document.getElementById('metricScore1'),
+  metricScore2: document.getElementById('metricScore2'),
+  metricScore3: document.getElementById('metricScore3'),
+  metricScore4: document.getElementById('metricScore4'),
+  metricScore5: document.getElementById('metricScore5'),
+  moveMetricUpBtn: document.getElementById('moveMetricUpBtn'),
+  moveMetricDownBtn: document.getElementById('moveMetricDownBtn'),
+  deleteMetricBtn: document.getElementById('deleteMetricBtn'),
+  saveMetricBtn: document.getElementById('saveMetricBtn'),
+  metricEditorStatus: document.getElementById('metricEditorStatus'),
+  addSectionBtn: document.getElementById('addSectionBtn'),
+  sectionEditorSelect: document.getElementById('sectionEditorSelect'),
+  sectionNameInput: document.getElementById('sectionNameInput'),
+  sectionKeyInput: document.getElementById('sectionKeyInput'),
+  sectionDescriptionInput: document.getElementById('sectionDescriptionInput'),
+  moveSectionUpBtn: document.getElementById('moveSectionUpBtn'),
+  moveSectionDownBtn: document.getElementById('moveSectionDownBtn'),
+  deleteSectionBtn: document.getElementById('deleteSectionBtn'),
+  saveSectionBtn: document.getElementById('saveSectionBtn'),
+  sectionEditorStatus: document.getElementById('sectionEditorStatus'),
   rubricText: document.getElementById('rubricText'),
 };
 
@@ -133,7 +171,7 @@ const state = {
   original: null,
   model: null,
   candidates: [],
-  activePane: 'analysis',
+  activePane: 'table',
   scatterControlsOpen: false,
   thresholds: { nf: null, f: null },
   labelMode: 'smart',
@@ -141,12 +179,16 @@ const state = {
   sort: 'total-desc',
   quadrant: 'all',
   savedView: 'all',
+  pipelineColumns: ['owner', 'tags', 'stage', 'nonFin', 'fin', 'total', 'quadrant', 'lastActivity'],
+  pipelineSavedFilters: [],
+  selectedPipelineFilterId: '',
   compareA: null,
   compareB: null,
   compareMode: 'raw',
   newDraft: null,
   selectedRows: [],
-  selectedTableStartupId: null,
+  detailStartupId: null,
+  detailTab: 'overview',
   draftWeights: {},
   weightPreset: 'balanced',
   scatterPoints: [],
@@ -169,10 +211,46 @@ const state = {
   newDraftMeta: { ...NEW_DRAFT_DEFAULTS },
   newDraftPersistTimer: null,
   newStartupDrafts: [],
+  briefPersistTimers: {},
 };
 
 function uid() {
   return 'c_' + Math.random().toString(36).slice(2, 10);
+}
+
+function normalizePane(pane) {
+  if (pane === 'new' || pane === 'weights') return 'table';
+  return SUPPORTED_PANES.has(pane) ? pane : 'table';
+}
+
+function defaultPipelineColumns() {
+  return PIPELINE_COLUMN_OPTIONS.map((option) => option.key);
+}
+
+function normalizePipelineColumns(columns) {
+  const allowed = new Set(defaultPipelineColumns());
+  const incoming = Array.isArray(columns) ? columns.map((item) => String(item || '').trim()).filter(Boolean) : [];
+  const filtered = incoming.filter((item, index) => allowed.has(item) && incoming.indexOf(item) === index);
+  return filtered.length ? filtered : defaultPipelineColumns();
+}
+
+function normalizePipelineSavedFilters(filters) {
+  if (!Array.isArray(filters)) return [];
+  return filters
+    .map((filter, index) => {
+      const name = String(filter?.name || '').trim();
+      if (!name) return null;
+      return {
+        id: String(filter?.id || `pipeline-filter-${index + 1}`),
+        name,
+        search: String(filter?.search || ''),
+        sort: String(filter?.sort || 'total-desc'),
+        quadrant: String(filter?.quadrant || 'all'),
+        savedView: String(filter?.savedView || 'all'),
+        columns: normalizePipelineColumns(filter?.columns),
+      };
+    })
+    .filter(Boolean);
 }
 
 function clone(x) {
@@ -191,51 +269,37 @@ function fmt(v, d = 1) {
 }
 
 function displayColumn(column) {
-  if (!/^[A-Z]$/.test(column)) return column;
-  if (column === 'A') return 'A';
-  return String.fromCharCode(column.charCodeAt(0) - 1);
+  return column;
 }
 
 function getMetrics() {
-  return state.model.weights;
+  return state.model.metrics || [];
 }
 
 function getRubrics() {
-  return state.model.metricRubrics;
+  return state.model.metricRubrics || [];
 }
 
 function getNewStartupMetrics() {
-  return getMetrics().slice(0, 8);
+  return getMetrics();
+}
+
+function getSections() {
+  return Array.isArray(state.model?.sections) ? state.model.sections : [];
+}
+
+function metricEvidencePrompts(metric) {
+  return Array.isArray(metric?.evidencePrompts) ? metric.evidencePrompts.filter(Boolean) : [];
 }
 
 function newStartupPrompt(metric, index) {
-  const prompts = [
-    'Who are the founders, what have they built before, and what evidence shows execution strength or weakness?',
-    'What is the product today, what problem does it solve, and what proof shows user pull or product clarity?',
-    'What commercial evidence exists today: revenue, pilots, conversion, retention, or repeat demand?',
-    'How does the business model make money, and what evidence supports monetization quality or margin durability?',
-    'Why can this opportunity scale, and what evidence supports market size, expansion, or global reach?',
-    'Who are the key competitors, and what evidence shows defensibility, differentiation, or risk?',
-    'What do the financials say about burn, runway, discipline, and current operating health?',
-    'What credible exit paths exist, and what comparable outcomes or buyer logic support them?',
-  ];
-  return prompts[index] || `What evidence supports the score for ${metric.label}?`;
+  const prompts = metricEvidencePrompts(metric);
+  if (prompts.length) return prompts[0];
+  return `What evidence supports the score for ${metric.label}?`;
 }
 
 function setDraftWeightsFromModel() {
   state.draftWeights = scoringCore.createWeightsMap(getMetrics());
-}
-
-function applyMetricNameOverrides(model) {
-  const byColumn = new Map();
-  model.weights.forEach((m, idx) => {
-    const nextName = METRIC_NAME_LIST[idx % METRIC_NAME_LIST.length];
-    m.label = nextName;
-    byColumn.set(m.column, nextName);
-  });
-  model.metricRubrics.forEach((r, idx) => {
-    r.label = byColumn.get(r.column) || METRIC_NAME_LIST[idx % METRIC_NAME_LIST.length];
-  });
 }
 
 function computeScores(candidate) {
@@ -344,6 +408,17 @@ function latestEvaluationFor(startupId) {
   return state.evaluations.find((evaluation) => evaluation.startupId === startupId) || null;
 }
 
+function briefStatusEl() {
+  return document.getElementById('briefEditStatus');
+}
+
+function setBriefEditStatus(message, type = 'neutral') {
+  const el = briefStatusEl();
+  if (!el) return;
+  el.textContent = message;
+  el.dataset.type = type;
+}
+
 function decisionBucket(candidate) {
   const quadrant = quadrantOf(candidate);
   if (quadrant === 'top-right') return 'invest';
@@ -407,14 +482,8 @@ function evaluationSignalSummary(candidate) {
 }
 
 function ensureTableSelection(rows = visibleCandidates()) {
-  if (!rows.length) {
-    state.selectedTableStartupId = null;
-    return null;
-  }
-  if (!state.selectedTableStartupId || !rows.some((candidate) => candidate.id === state.selectedTableStartupId)) {
-    state.selectedTableStartupId = rows[0].id;
-  }
-  return getCandidateById(state.selectedTableStartupId);
+  if (!rows.length) return null;
+  return getCandidateById(state.detailStartupId) || rows[0];
 }
 
 function analyticsThresholdKey() {
@@ -687,6 +756,7 @@ function serializeServerSnapshot() {
       tags: clone(candidateTags(c)),
       stage: candidateStage(c),
       lastAiEvaluationId: c.lastAiEvaluationId || null,
+      detail: clone(startupDetail(c)),
     })),
   };
 }
@@ -701,10 +771,15 @@ function serializeUi() {
     sort: state.sort,
     quadrant: state.quadrant,
     savedView: state.savedView,
+    pipelineColumns: clone(state.pipelineColumns),
+    pipelineSavedFilters: clone(state.pipelineSavedFilters),
+    selectedPipelineFilterId: state.selectedPipelineFilterId,
     compareA: state.compareA,
     compareB: state.compareB,
     compareMode: state.compareMode,
     scatterSelectedId: state.scatterSelectedId,
+    detailStartupId: state.detailStartupId,
+    detailTab: state.detailTab,
     scatterFocusTopNear: state.scatterFocusTopNear,
     weightPreset: state.weightPreset,
     aiSelectedStartupId: state.aiSelectedStartupId,
@@ -777,7 +852,7 @@ function normalizeDraftLibraryEntry(draft, fallbackKey = '') {
       ...(draft.meta || {}),
       draftId,
     },
-    draft: draft.draft ? clone(draft.draft) : emptyDraft(),
+    draft: draft.draft ? normalizeDraftData(clone(draft.draft)) : emptyDraft(),
   };
 }
 
@@ -905,6 +980,17 @@ async function fetchBootstrapSnapshot() {
   }
 }
 
+function normalizeDraftData(draft) {
+  const base = emptyDraft();
+  if (!draft) return base;
+  return {
+    scores: { ...base.scores, ...(draft.scores || {}) },
+    externalScores: { ...base.externalScores, ...(draft.externalScores || {}) },
+    aiScores: { ...base.aiScores, ...(draft.aiScores || {}) },
+    notes: { ...base.notes, ...(draft.notes || {}) },
+  };
+}
+
 function loadSaved() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -916,19 +1002,14 @@ function loadSaved() {
 }
 
 function hydrate(snapshot) {
-  state.model = snapshot.model;
-  applyMetricNameOverrides(state.model);
-  state.candidates = snapshot.candidates.map((c) => ({
-    ...c,
-    externalScores: c.externalScores || {},
-    aiScores: c.aiScores || {},
-    aiRationales: c.aiRationales || {},
-    lastAiEvaluationId: c.lastAiEvaluationId || null,
+  state.model = metricModel.normalizeModel(snapshot.model || {});
+  state.candidates = snapshot.candidates.map((c, index) => ({
+    ...metricModel.normalizeCandidate(c, state.model, index),
     computed: { nonFinancial: 0, financial: 0, total: 0 },
   }));
 
   const ui = snapshot.ui || {};
-  state.activePane = ui.activePane || 'analysis';
+  state.activePane = normalizePane(ui.activePane || 'table');
   state.scatterControlsOpen = !!ui.scatterControlsOpen;
   state.thresholds = ui.thresholds || { nf: null, f: null };
   state.labelMode = ui.labelMode || 'smart';
@@ -936,15 +1017,19 @@ function hydrate(snapshot) {
   state.sort = ui.sort || 'total-desc';
   state.quadrant = ui.quadrant || 'all';
   state.savedView = ui.savedView || 'all';
+  state.pipelineColumns = normalizePipelineColumns(ui.pipelineColumns);
+  state.pipelineSavedFilters = normalizePipelineSavedFilters(ui.pipelineSavedFilters);
+  state.selectedPipelineFilterId = ui.selectedPipelineFilterId || '';
   state.compareA = ui.compareA || state.candidates[0]?.id || null;
   state.compareB = ui.compareB || state.candidates.find((c) => c.id !== state.compareA)?.id || state.compareA;
   state.compareMode = ui.compareMode || 'raw';
   state.scatterSelectedId = ui.scatterSelectedId || null;
+  state.detailStartupId = ui.detailStartupId || state.scatterSelectedId || state.candidates[0]?.id || null;
+  state.detailTab = ui.detailTab || 'overview';
   state.scatterFocusTopNear = Boolean(ui.scatterFocusTopNear);
   state.weightPreset = ui.weightPreset || 'balanced';
   state.aiSelectedStartupId = ui.aiSelectedStartupId || state.scatterSelectedId || state.compareA;
   state.selectedRows = [];
-  state.selectedTableStartupId = null;
   state.weightPreviewData = null;
   state.analytics = null;
   state.analyticsKey = '';
@@ -958,7 +1043,7 @@ function hydrate(snapshot) {
     ...NEW_DRAFT_DEFAULTS,
     ...(snapshot.newStartupDraft?.meta || {}),
   };
-  state.newDraft = snapshot.newStartupDraft?.draft ? clone(snapshot.newStartupDraft.draft) : null;
+  state.newDraft = snapshot.newStartupDraft?.draft ? normalizeDraftData(clone(snapshot.newStartupDraft.draft)) : null;
   syncDraftLibraryWithCurrent();
 
   recomputeAll();
@@ -985,6 +1070,7 @@ function freshSnapshot() {
       tags: [],
       stage: 'sourcing',
       lastAiEvaluationId: c.lastAiEvaluationId || null,
+      detail: normalizeStartupDetail(),
     })),
     ui: {},
     newStartupDraft: null,
@@ -1152,10 +1238,10 @@ function renderNewDraftPicker() {
 }
 
 function setPane(pane) {
-  state.activePane = pane;
-  els.panes.forEach((p) => { p.hidden = p.dataset.pane !== pane; });
-  els.navBtns.forEach((b) => b.classList.toggle('is-active', b.dataset.pane === pane));
-  if (pane !== 'analysis') {
+  state.activePane = normalizePane(pane);
+  els.panes.forEach((p) => { p.hidden = p.dataset.pane !== state.activePane; });
+  els.navBtns.forEach((b) => b.classList.toggle('is-active', b.dataset.pane === state.activePane));
+  if (state.activePane !== 'analysis') {
     state.scatterHoverId = null;
     hideScatterTooltip();
   }
@@ -1897,6 +1983,23 @@ function renderSelectedStartupBrief() {
           ${tags.length ? tags.map((tag) => `<span class="brief-chip">${escapeHtml(tag)}</span>`).join('') : '<span class="brief-chip is-muted">No tags</span>'}
         </div>
       </div>
+      <div class="selected-brief-controls">
+        <label class="selected-brief-field">Stage
+          <select data-action="brief-edit-stage" data-id="${escapeHtml(candidate.id)}">
+            ${['sourcing', 'diligence', 'ic-ready', 'watchlist', 'pass'].map((value) => `<option value="${escapeHtml(value)}"${stage === value ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="selected-brief-field">Tags
+          <input
+            type="text"
+            value="${escapeHtml(tags.join(', '))}"
+            placeholder="e.g. AI, Climate, SaaS"
+            data-action="brief-edit-tags"
+            data-id="${escapeHtml(candidate.id)}"
+          />
+        </label>
+      </div>
+      <div id="briefEditStatus" class="brief-edit-status" data-type="neutral">Edit stage and tags inline. Changes save back to the model.</div>
       <div class="selected-brief-kpis">
         <div class="kpi"><div class="muted">Total</div><strong>${escapeHtml(fmt(candidate.computed.total))}</strong></div>
         <div class="kpi"><div class="muted">Non-Fin</div><strong>${escapeHtml(fmt(candidate.computed.nonFinancial))}</strong></div>
@@ -1999,7 +2102,12 @@ function renderCompare() {
     }).join('');
   }
   if (els.compareEvidence) {
-    els.compareEvidence.innerHTML = compareMetrics.map((metric) => {
+    const sectionGuidance = renderSectionGuidanceHtml({
+      sections: getNewStartupSections(),
+      emptyMessage: '',
+      metricsByColumn: new Map(compareMetrics.map((metric) => [metric.column, metric])),
+    });
+    els.compareEvidence.innerHTML = `${sectionGuidance}${compareMetrics.map((metric) => {
       const analystA = num(a.scores?.[metric.column]);
       const externalA = num(a.externalScores?.[metric.column]);
       const aiA = num(a.aiScores?.[metric.column]);
@@ -2052,7 +2160,7 @@ function renderCompare() {
           </div>
         </div>
       `;
-    }).join('');
+    }).join('')}`;
   }
 
   const metrics = compareMetrics;
@@ -2151,6 +2259,39 @@ function renderCompare() {
   });
 }
 
+function renderSectionGuidanceHtml(options = {}) {
+  const {
+    sections = [],
+    emptyMessage = '',
+    metricsByColumn = null,
+  } = options;
+  const visibleSections = sections.filter((section) => String(section.description || '').trim());
+  if (!visibleSections.length) return emptyMessage;
+  return `
+    <div class="section-guidance-list">
+      ${visibleSections.map((section) => {
+        const visibleMetrics = Array.isArray(section.metrics) ? section.metrics : [];
+        const metricLabels = visibleMetrics
+          .map((metric) => (metricsByColumn ? metricsByColumn.get(metric.column) : metric))
+          .filter(Boolean)
+          .map((metric) => `${displayColumn(metric.column)} ${metric.label}`);
+        return `
+          <details class="section-guidance-card">
+            <summary class="section-guidance-summary">
+              <span>
+                <strong>${escapeHtml(section.title)}</strong>
+                <span class="muted">${escapeHtml(metricLabels.join(' · '))}</span>
+              </span>
+              <span class="section-guidance-toggle">Analyst context</span>
+            </summary>
+            <p class="section-guidance-body">${escapeHtml(section.description)}</p>
+          </details>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
 function scoreSelect(value, onChange) {
   const s = document.createElement('select');
   SCORE_OPTIONS.forEach((v) => {
@@ -2174,12 +2315,23 @@ function emptyDraft() {
 }
 
 function templateScores(key) {
-  const cols = getMetrics().map((m) => m.column);
-  if (key === 'blank') return Object.fromEntries(cols.map((c) => [c, null]));
-  if (key === 'premium') return Object.fromEntries(cols.map((c) => [c, c === 'L' ? null : 5]));
-  if (key === 'traction') return { B: 3, C: 3, D: 3, E: 5, F: 5, G: 3, H: 5, I: 5, J: 3, K: 3, L: null };
-  if (key === 'potential') return { B: 5, C: 3, D: 3, E: 3, F: 5, G: 5, H: 1, I: 1, J: 1, K: 1, L: null };
-  return Object.fromEntries(cols.map((c) => [c, 3]));
+  const metrics = getMetrics();
+  if (key === 'blank') return Object.fromEntries(metrics.map((metric) => [metric.column, null]));
+  if (key === 'premium') return Object.fromEntries(metrics.map((metric) => [metric.column, 5]));
+  if (key === 'traction') {
+    return Object.fromEntries(metrics.map((metric) => {
+      const strong = ['revenue-business-model', 'product-differentiation', 'financial-health-investment'].includes(metric.key);
+      return [metric.column, strong ? 4 : 3];
+    }));
+  }
+  if (key === 'potential') {
+    return Object.fromEntries(metrics.map((metric) => {
+      if (metric.key === 'financial-health-investment') return [metric.column, 2];
+      const highPotential = ['team', 'market-competition', 'global-expansion-scalability', 'strategic-fit-exit'].includes(metric.key);
+      return [metric.column, highPotential ? 4 : 3];
+    }));
+  }
+  return Object.fromEntries(metrics.map((metric) => [metric.column, 3]));
 }
 
 function buildDraftFromSelections() {
@@ -2209,12 +2361,22 @@ function buildDraftFromSelections() {
 
 function getNewStartupSections() {
   const metrics = getNewStartupMetrics();
-  return [
-    { key: 'core', title: 'Core', metrics: metrics.slice(0, 2), open: true },
-    { key: 'market', title: 'Market', metrics: metrics.slice(2, 4), open: false },
-    { key: 'financial', title: 'Financial', metrics: metrics.slice(4, 6), open: false },
-    { key: 'exit', title: 'Exit', metrics: metrics.slice(6, 8), open: false },
-  ].filter((s) => s.metrics.length > 0);
+  const sectionDefs = Array.isArray(state.model.sections) && state.model.sections.length
+    ? state.model.sections
+    : [
+        { key: 'foundation', title: 'Foundation' },
+        { key: 'commercial', title: 'Commercial' },
+        { key: 'scale', title: 'Team & Scale' },
+        { key: 'capital', title: 'Capital & Strategy' },
+      ];
+  return sectionDefs
+    .map((section, index) => ({
+      key: section.key,
+      title: section.title,
+      metrics: metrics.filter((metric) => metric.sectionKey === section.key),
+      open: index === 0,
+    }))
+    .filter((section) => section.metrics.length > 0);
 }
 
 function sectionCompletion(metrics, draft) {
@@ -2295,6 +2457,13 @@ function renderNewForm() {
     `;
     block.appendChild(summary);
 
+    if (section.description) {
+      const description = document.createElement('p');
+      description.className = 'new-section-guidance';
+      description.textContent = section.description;
+      block.appendChild(description);
+    }
+
     section.metrics.forEach((m, metricIndex) => {
       const row = document.createElement('div');
       row.className = 'metric-row';
@@ -2339,8 +2508,22 @@ function renderNewForm() {
 
       const hint = document.createElement('p');
       hint.className = 'metric-evidence-hint';
-      hint.textContent = newStartupPrompt(m, getNewStartupMetrics().indexOf(m));
+      hint.textContent = 'Evidence to collect:';
       nl.appendChild(hint);
+
+      const promptList = document.createElement('ul');
+      promptList.className = 'metric-prompt-list';
+      metricEvidencePrompts(m).forEach((prompt) => {
+        const item = document.createElement('li');
+        item.textContent = prompt;
+        promptList.appendChild(item);
+      });
+      if (!promptList.childElementCount) {
+        const item = document.createElement('li');
+        item.textContent = newStartupPrompt(m, getNewStartupMetrics().indexOf(m));
+        promptList.appendChild(item);
+      }
+      nl.appendChild(promptList);
 
       const ail = document.createElement('label');
       ail.textContent = 'AI Score';
@@ -2434,6 +2617,187 @@ function candidateTags(candidate) {
 
 function candidateStage(candidate) {
   return candidate.stage || 'sourcing';
+}
+
+function candidateOwner(candidate) {
+  return startupDetail(candidate).overview.owner || '';
+}
+
+function latestActivityEntry(candidate) {
+  const history = startupDetail(candidate).history || [];
+  if (!history.length) return null;
+  return history.reduce((latest, entry) => {
+    const latestTime = latest ? new Date(latest.at).getTime() : -Infinity;
+    const entryTime = new Date(entry.at).getTime();
+    return entryTime > latestTime ? entry : latest;
+  }, null);
+}
+
+function latestActivityAt(candidate) {
+  return latestActivityEntry(candidate)?.at || null;
+}
+
+function formatActivityTimestamp(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString();
+}
+
+function pipelineColumnIsVisible(key) {
+  return state.pipelineColumns.includes(key);
+}
+
+function visiblePipelineColumns() {
+  const allowed = new Set(state.pipelineColumns);
+  return PIPELINE_COLUMN_OPTIONS.filter((option) => allowed.has(option.key));
+}
+
+function currentPipelineFilterSnapshot() {
+  return {
+    search: state.search,
+    sort: state.sort,
+    quadrant: state.quadrant,
+    savedView: state.savedView,
+    columns: normalizePipelineColumns(state.pipelineColumns),
+  };
+}
+
+function applyPipelineFilterSnapshot(snapshot = {}) {
+  state.search = String(snapshot.search || '');
+  state.sort = String(snapshot.sort || 'total-desc');
+  state.quadrant = String(snapshot.quadrant || 'all');
+  state.savedView = String(snapshot.savedView || 'all');
+  state.pipelineColumns = normalizePipelineColumns(snapshot.columns);
+}
+
+function renderPipelineFilterControls() {
+  if (els.pipelineFilterSelect) {
+    const options = ['<option value="">Current filters</option>']
+      .concat(state.pipelineSavedFilters.map((filter) => (
+        `<option value="${escapeHtml(filter.id)}"${filter.id === state.selectedPipelineFilterId ? ' selected' : ''}>${escapeHtml(filter.name)}</option>`
+      )));
+    els.pipelineFilterSelect.innerHTML = options.join('');
+    if (els.pipelineFilterSelect.value !== state.selectedPipelineFilterId) {
+      els.pipelineFilterSelect.value = state.selectedPipelineFilterId || '';
+    }
+  }
+  if (els.pipelineFilterName) {
+    const currentFilter = state.pipelineSavedFilters.find((filter) => filter.id === state.selectedPipelineFilterId) || null;
+    if (document.activeElement !== els.pipelineFilterName) {
+      els.pipelineFilterName.value = currentFilter?.name || '';
+    }
+  }
+  if (els.deletePipelineFilterBtn) {
+    els.deletePipelineFilterBtn.disabled = !state.selectedPipelineFilterId;
+  }
+}
+
+function renderPipelineColumnControls() {
+  if (!els.pipelineColumnList) return;
+  els.pipelineColumnList.innerHTML = PIPELINE_COLUMN_OPTIONS.map((option) => `
+    <label class="column-picker-item">
+      <input type="checkbox" data-action="toggle-pipeline-column" value="${escapeHtml(option.key)}"${pipelineColumnIsVisible(option.key) ? ' checked' : ''} />
+      <span>${escapeHtml(option.label)}</span>
+    </label>
+  `).join('');
+}
+
+function clearActivePipelineFilterSelection() {
+  state.selectedPipelineFilterId = '';
+}
+
+function defaultDiligenceChecklist() {
+  return [
+    { id: 'product', label: 'Product diligence completed', done: false, owner: '' },
+    { id: 'market', label: 'Market and competition validated', done: false, owner: '' },
+    { id: 'customer', label: 'Customer / user references checked', done: false, owner: '' },
+    { id: 'financial', label: 'Financial assumptions reviewed', done: false, owner: '' },
+    { id: 'legal', label: 'Legal / compliance review scoped', done: false, owner: '' },
+  ];
+}
+
+function normalizeStartupDetail(detail = {}) {
+  const checklistSeed = Array.isArray(detail?.diligence?.checklist) && detail.diligence.checklist.length
+    ? detail.diligence.checklist
+    : defaultDiligenceChecklist();
+  return {
+    overview: {
+      summary: String(detail?.overview?.summary || '').trim(),
+      thesis: String(detail?.overview?.thesis || '').trim(),
+      owner: String(detail?.overview?.owner || '').trim(),
+      nextStep: String(detail?.overview?.nextStep || '').trim(),
+    },
+    diligence: {
+      status: String(detail?.diligence?.status || 'not-started').trim() || 'not-started',
+      notes: String(detail?.diligence?.notes || '').trim(),
+      checklist: checklistSeed.map((item, index) => ({
+        id: String(item?.id || `task-${index + 1}`),
+        label: String(item?.label || `Task ${index + 1}`).trim(),
+        done: Boolean(item?.done),
+        owner: String(item?.owner || '').trim(),
+      })),
+    },
+    attachments: Array.isArray(detail?.attachments) ? detail.attachments.map((item, index) => ({
+      id: String(item?.id || `attachment-${index + 1}`),
+      name: String(item?.name || '').trim(),
+      url: String(item?.url || '').trim(),
+      type: String(item?.type || '').trim(),
+      addedAt: item?.addedAt || new Date().toISOString(),
+    })).filter((item) => item.name || item.url) : [],
+    history: Array.isArray(detail?.history) ? detail.history.map((entry, index) => ({
+      id: String(entry?.id || `history-${index + 1}`),
+      type: String(entry?.type || 'note'),
+      text: String(entry?.text || '').trim(),
+      at: entry?.at || new Date().toISOString(),
+    })).filter((entry) => entry.text) : [],
+  };
+}
+
+function startupDetail(candidate) {
+  if (!candidate) return normalizeStartupDetail();
+  candidate.detail = normalizeStartupDetail(candidate.detail || {});
+  return candidate.detail;
+}
+
+function createHistoryEntry(type, text) {
+  return {
+    id: uid(),
+    type,
+    text: String(text || '').trim(),
+    at: new Date().toISOString(),
+  };
+}
+
+function detailCompletion(candidate) {
+  const detail = startupDetail(candidate);
+  const notes = noteCoverageSummary(candidate);
+  const diligenceDone = detail.diligence.checklist.filter((item) => item.done).length;
+  return {
+    notes,
+    diligenceDone,
+    diligenceTotal: detail.diligence.checklist.length,
+  };
+}
+
+function getDetailCandidate() {
+  const id = state.detailStartupId || state.scatterSelectedId || state.candidates[0]?.id || null;
+  return getCandidateById(id);
+}
+
+function openStartupDetail(candidateId, tab = state.detailTab || 'overview') {
+  if (!candidateId) return;
+  state.detailStartupId = candidateId;
+  state.detailTab = tab;
+  state.activePane = 'detail';
+  save();
+  renderAll();
+}
+
+function setDetailStatus(message, type = 'neutral') {
+  if (!els.detailStatus) return;
+  els.detailStatus.textContent = message;
+  els.detailStatus.dataset.type = type;
 }
 
 function passesSavedView(candidate) {
@@ -2568,16 +2932,25 @@ async function refreshWeightPreview() {
 
 function renderTable() {
   const rows = visibleCandidates();
-  ensureTableSelection(rows);
   const thead = els.table.querySelector('thead');
   const tbody = els.table.querySelector('tbody');
   const selection = selectedRowSet();
   const selectedVisible = visibleSelectedCount(rows);
   const selectedTotal = state.selectedRows.length;
+  const visibleColumns = visiblePipelineColumns();
+  const headerCells = [
+    '<th class="table-cell-check"><input id="tableSelectAll" type="checkbox" /></th>',
+    '<th>Rank</th>',
+    '<th>Name</th>',
+    ...visibleColumns.map((column) => `<th>${escapeHtml(column.label)}</th>`),
+    '<th>Actions</th>',
+  ];
 
-  thead.innerHTML = '<tr><th><input id="tableSelectAll" type="checkbox" /></th><th>Rank</th><th>Name</th><th>Tags</th><th>Stage</th><th>Non-Fin</th><th>Fin</th><th>Total</th><th>Quadrant</th><th>Actions</th></tr>';
+  renderPipelineFilterControls();
+  renderPipelineColumnControls();
+  thead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
   tbody.innerHTML = '';
-  els.selectionStatus.textContent = `${selectedTotal} selected`;
+  els.selectionStatus.textContent = `${selectedTotal} selected · ${rows.length} visible`;
   els.selectVisibleToggle.checked = rows.length > 0 && selectedVisible === rows.length;
   els.bulkTagBtn.disabled = selectedTotal === 0;
   els.bulkStageBtn.disabled = selectedTotal === 0;
@@ -2585,7 +2958,7 @@ function renderTable() {
 
   rows.forEach((c, i) => {
     const tr = document.createElement('tr');
-    tr.className = c.id === state.selectedTableStartupId ? 'is-selected-row' : '';
+    tr.className = c.id === state.detailStartupId ? 'is-selected-row' : '';
     tr.dataset.id = c.id;
     tr.tabIndex = 0;
     tr.setAttribute('role', 'button');
@@ -2627,32 +3000,69 @@ function renderTable() {
       renderAll();
     });
     tdName.appendChild(inp);
-
-    const tdTags = document.createElement('td');
-    const tagInput = document.createElement('input');
-    tagInput.value = candidateTags(c).join(', ');
-    tagInput.placeholder = 'Add tags';
-    tagInput.dataset.action = 'edit-tags';
-    tagInput.dataset.id = c.id;
-    tdTags.appendChild(tagInput);
-
-    const tdStage = document.createElement('td');
-    const stageSelect = document.createElement('select');
-    ['sourcing', 'diligence', 'ic-ready', 'watchlist', 'pass'].forEach((stage) => {
-      const option = document.createElement('option');
-      option.value = stage;
-      option.textContent = stage;
-      stageSelect.appendChild(option);
+    const dynamicCells = visibleColumns.map((column) => {
+      const td = document.createElement('td');
+      td.dataset.column = column.key;
+      if (column.key === 'owner') {
+        const ownerInput = document.createElement('input');
+        ownerInput.value = candidateOwner(c);
+        ownerInput.placeholder = 'Assign owner';
+        ownerInput.dataset.action = 'edit-owner';
+        ownerInput.dataset.id = c.id;
+        td.appendChild(ownerInput);
+        return td;
+      }
+      if (column.key === 'tags') {
+        const tagInput = document.createElement('input');
+        tagInput.value = candidateTags(c).join(', ');
+        tagInput.placeholder = 'Add tags';
+        tagInput.dataset.action = 'edit-tags';
+        tagInput.dataset.id = c.id;
+        td.appendChild(tagInput);
+        return td;
+      }
+      if (column.key === 'stage') {
+        const stageSelect = document.createElement('select');
+        ['sourcing', 'diligence', 'ic-ready', 'watchlist', 'pass'].forEach((stage) => {
+          const option = document.createElement('option');
+          option.value = stage;
+          option.textContent = stage;
+          stageSelect.appendChild(option);
+        });
+        stageSelect.value = candidateStage(c);
+        stageSelect.dataset.action = 'edit-stage';
+        stageSelect.dataset.id = c.id;
+        td.appendChild(stageSelect);
+        return td;
+      }
+      if (column.key === 'nonFin') {
+        td.textContent = fmt(c.computed.nonFinancial);
+        return td;
+      }
+      if (column.key === 'fin') {
+        td.textContent = fmt(c.computed.financial);
+        return td;
+      }
+      if (column.key === 'total') {
+        td.innerHTML = `<span class="score-chip">${fmt(c.computed.total)}</span>`;
+        return td;
+      }
+      if (column.key === 'quadrant') {
+        td.textContent = quadrantOf(c);
+        return td;
+      }
+      if (column.key === 'lastActivity') {
+        const latest = latestActivityEntry(c);
+        td.innerHTML = `
+          <div class="table-meta-stack">
+            <strong>${escapeHtml(formatActivityTimestamp(latest?.at || null))}</strong>
+            <span>${escapeHtml(latest?.type || 'No activity')}</span>
+          </div>
+        `;
+        return td;
+      }
+      return td;
     });
-    stageSelect.value = candidateStage(c);
-    stageSelect.dataset.action = 'edit-stage';
-    stageSelect.dataset.id = c.id;
-    tdStage.appendChild(stageSelect);
-
-    const tdNF = document.createElement('td'); tdNF.textContent = fmt(c.computed.nonFinancial);
-    const tdF = document.createElement('td'); tdF.textContent = fmt(c.computed.financial);
-    const tdT = document.createElement('td'); tdT.innerHTML = `<span class="score-chip">${fmt(c.computed.total)}</span>`;
-    const tdQ = document.createElement('td'); tdQ.textContent = quadrantOf(c);
 
     const tdA = document.createElement('td');
     const rm = document.createElement('button');
@@ -2677,70 +3087,38 @@ function renderTable() {
     });
     tdA.appendChild(rm);
 
-    tr.append(tdCheck, tdRank, tdName, tdTags, tdStage, tdNF, tdF, tdT, tdQ, tdA);
+    tr.append(tdCheck, tdRank, tdName, ...dynamicCells, tdA);
     tbody.appendChild(tr);
   });
 
-  const headerToggle = document.getElementById('tableSelectAll');
-  if (headerToggle) headerToggle.checked = rows.length > 0 && selectedVisible === rows.length;
-  renderTableDetail();
-}
-
-function renderTableDetail() {
-  if (!els.tableDetailPanel) return;
-  const rows = visibleCandidates();
-  const candidate = ensureTableSelection(rows);
-  els.tableDetailCompareBtn.disabled = !candidate || state.candidates.length < 2;
-  els.tableDetailQueueBtn.disabled = !candidate || !state.serverMode;
-
-  if (!candidate) {
-    els.tableDetailPanel.className = 'selected-brief-empty';
-    els.tableDetailPanel.innerHTML = 'Select a startup row to inspect its pipeline detail.';
-    return;
+  if (!rows.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = headerCells.length;
+    td.innerHTML = '<div class="table-empty-state">No startups match the current pipeline filters.</div>';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
   }
 
+  const headerToggle = document.getElementById('tableSelectAll');
+  if (headerToggle) headerToggle.checked = rows.length > 0 && selectedVisible === rows.length;
+}
+
+function renderStartupRecordHero(candidate) {
+  if (!els.detailHero) return;
+  if (!candidate) {
+    els.detailHero.className = 'selected-brief-empty';
+    els.detailHero.innerHTML = 'Select a startup to open its record.';
+    return;
+  }
   const quality = pointQuality(candidate);
   const notes = noteCoverageSummary(candidate);
-  const topDrivers = topMetricContributors(candidate, 4);
-  const topGaps = fastestImprovementGaps(candidate, 4);
-  const signalSummary = evaluationSignalSummary(candidate);
-  const stage = candidateStage(candidate);
   const tags = candidateTags(candidate);
-  const evaluationMatrix = visibleTableMetrics().map((metric) => {
-    const analyst = num(candidate.scores?.[metric.column]);
-    const external = num(candidate.externalScores?.[metric.column]);
-    const ai = num(candidate.aiScores?.[metric.column]);
-    const blended = scoringCore.resolveMetricScore(candidate, metric.column);
-    const spreadValues = [analyst, external, ai].filter((value) => value !== null);
-    const spread = spreadValues.length >= 2 ? Math.max(...spreadValues) - Math.min(...spreadValues) : 0;
-    return `
-      <div class="evaluation-matrix-row">
-        <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
-        <span>${escapeHtml(fmt(analyst))}</span>
-        <span>${escapeHtml(fmt(external))}</span>
-        <span>${escapeHtml(fmt(ai))}</span>
-        <span>${escapeHtml(fmt(blended))}</span>
-        <span class="${spread >= 2 ? 'is-alert-text' : ''}">${escapeHtml(fmt(spread))}</span>
-      </div>
-    `;
-  }).join('');
-  const noteBlocks = visibleTableMetrics().map((metric) => {
-    const score = scoringCore.resolveMetricScore(candidate, metric.column);
-    const note = String(candidate.notes?.[metric.column] || '').trim();
-    return `
-      <div class="startup-note-card">
-        <div class="startup-note-head">
-          <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
-          <span class="muted">Score ${escapeHtml(fmt(score))} · Weight ${escapeHtml(fmt(metric.weight, 0))}</span>
-        </div>
-        <p>${escapeHtml(note || 'No analyst note entered for this metric yet.')}</p>
-      </div>
-    `;
-  }).join('');
-
-  els.tableDetailPanel.className = 'startup-detail-grid';
-  els.tableDetailPanel.innerHTML = `
-    <div class="startup-detail-overview">
+  const stage = candidateStage(candidate);
+  const detail = startupDetail(candidate);
+  els.detailHero.className = 'selected-brief-grid';
+  els.detailHero.innerHTML = `
+    <div class="selected-brief-primary">
       <div class="selected-brief-heading">
         <div>
           <h4>${escapeHtml(candidate.name)}</h4>
@@ -2752,59 +3130,326 @@ function renderTableDetail() {
       </div>
       <div class="selected-brief-kpis">
         <div class="kpi"><div class="muted">Total</div><strong>${escapeHtml(fmt(candidate.computed.total))}</strong></div>
-        <div class="kpi"><div class="muted">Non-Fin</div><strong>${escapeHtml(fmt(candidate.computed.nonFinancial))}</strong></div>
-        <div class="kpi"><div class="muted">Fin</div><strong>${escapeHtml(fmt(candidate.computed.financial))}</strong></div>
         <div class="kpi"><div class="muted">Coverage</div><strong>${escapeHtml(fmt(quality.coverage * 100, 0))}%</strong></div>
-      </div>
-      <div class="decision-summary startup-detail-summary">
-        <div class="decision-item"><strong>Notes coverage</strong><span>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))} metrics documented</span></div>
-        <div class="decision-item"><strong>Top weighted drivers</strong><span>${escapeHtml(topDrivers.length ? topDrivers.map((metric) => metric.label).join(' · ') : 'No weighted drivers yet')}</span></div>
-        <div class="decision-item"><strong>Fastest improvement areas</strong><span>${escapeHtml(topGaps.length ? topGaps.map((metric) => metric.label).join(' · ') : 'Already at max visible score')}</span></div>
-        <div class="decision-item"><strong>AI confidence</strong><span>${signalSummary.confidence !== null && signalSummary.confidence !== undefined ? `${escapeHtml(fmt(signalSummary.confidence * 100, 0))}%` : 'Not evaluated yet'}</span></div>
-        <div class="decision-item"><strong>Highest score disagreements</strong><span>${escapeHtml(signalSummary.disagreements.metrics.length ? signalSummary.disagreements.metrics.map((metric) => `${displayColumn(metric.column)} ${metric.label}`).join(' · ') : 'No major disagreement')}</span></div>
-        <div class="decision-item"><strong>Latest AI summary</strong><span>${escapeHtml(signalSummary.summary)}</span></div>
-      </div>
-      <div class="startup-detail-actions">
-        <label>Move stage
-          <select id="tableDetailStageSelect">
-            <option value="sourcing"${stage === 'sourcing' ? ' selected' : ''}>sourcing</option>
-            <option value="diligence"${stage === 'diligence' ? ' selected' : ''}>diligence</option>
-            <option value="ic-ready"${stage === 'ic-ready' ? ' selected' : ''}>ic-ready</option>
-            <option value="watchlist"${stage === 'watchlist' ? ' selected' : ''}>watchlist</option>
-            <option value="pass"${stage === 'pass' ? ' selected' : ''}>pass</option>
-          </select>
-        </label>
-        <button id="tableDetailApplyStageBtn" type="button">Update Stage</button>
+        <div class="kpi"><div class="muted">Notes</div><strong>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))}</strong></div>
+        <div class="kpi"><div class="muted">Diligence</div><strong>${escapeHtml(detail.diligence.status)}</strong></div>
       </div>
     </div>
-    <div class="startup-detail-notes">
-      <h4>Decision Signals</h4>
-      <div class="startup-signal-grid">
-        <div class="startup-signal-card">
-          <strong>Strengths</strong>
-          <p>${escapeHtml(signalSummary.strengths.length ? signalSummary.strengths.join(' · ') : 'No AI strengths available yet.')}</p>
-        </div>
-        <div class="startup-signal-card">
-          <strong>Risks</strong>
-          <p>${escapeHtml(signalSummary.risks.length ? signalSummary.risks.join(' · ') : 'No AI risks available yet.')}</p>
-        </div>
-      </div>
-      <h4>Evaluation Matrix</h4>
-      <div class="evaluation-matrix">
-        <div class="evaluation-matrix-row evaluation-matrix-head">
-          <strong>Metric</strong>
-          <span>Analyst</span>
-          <span>External</span>
-          <span>AI</span>
-          <span>Blended</span>
-          <span>Spread</span>
-        </div>
-        ${evaluationMatrix}
-      </div>
-      <h4>Metric Notes</h4>
-      <div class="startup-note-list">${noteBlocks}</div>
+    <div class="selected-brief-insights">
+      <div class="decision-item"><strong>Owner</strong><span>${escapeHtml(detail.overview.owner || 'Unassigned')}</span></div>
+      <div class="decision-item"><strong>Next step</strong><span>${escapeHtml(detail.overview.nextStep || 'No next step defined')}</span></div>
+      <div class="decision-item"><strong>Investment thesis</strong><span>${escapeHtml(detail.overview.thesis || 'No thesis written yet')}</span></div>
+      <div class="decision-item"><strong>Summary</strong><span>${escapeHtml(detail.overview.summary || 'No overview summary yet')}</span></div>
     </div>
   `;
+}
+
+function renderStartupRecordTabContent(candidate) {
+  if (!els.detailTabPanel) return;
+  if (!candidate) {
+    els.detailTabPanel.innerHTML = '<div class="startup-record-empty">No startup selected.</div>';
+    return;
+  }
+
+  const detail = startupDetail(candidate);
+  const notes = noteCoverageSummary(candidate);
+  const signalSummary = evaluationSignalSummary(candidate);
+  const sectionGuidance = renderSectionGuidanceHtml({
+    sections: getNewStartupSections(),
+    emptyMessage: '',
+  });
+  const metrics = visibleTableMetrics();
+
+  if (state.detailTab === 'overview') {
+    els.detailTabPanel.innerHTML = `
+      <div class="startup-record-panel startup-record-grid">
+        <div class="startup-record-column">
+          <div class="startup-record-card-block">
+            <h3>Pipeline Context</h3>
+            <div class="startup-record-meta-grid">
+              <label>Stage
+                <select data-action="detail-stage">
+                  ${['sourcing', 'diligence', 'ic-ready', 'watchlist', 'pass'].map((value) => `<option value="${escapeHtml(value)}"${candidateStage(candidate) === value ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+                </select>
+              </label>
+              <label>Owner
+                <input type="text" data-action="detail-owner" value="${escapeHtml(detail.overview.owner)}" placeholder="e.g. Associate, Partner" />
+              </label>
+              <label>Tags
+                <input type="text" data-action="detail-tags" value="${escapeHtml(candidateTags(candidate).join(', '))}" placeholder="e.g. AI, SaaS, Climate" />
+              </label>
+              <label>Next Step
+                <input type="text" data-action="detail-next-step" value="${escapeHtml(detail.overview.nextStep)}" placeholder="e.g. Schedule partner meeting" />
+              </label>
+            </div>
+          </div>
+          <div class="startup-record-card-block">
+            <h3>Startup Overview</h3>
+            <label>Summary
+              <textarea class="startup-record-richtext" data-action="detail-summary" placeholder="What this startup does, why it matters, and where it stands today.">${escapeHtml(detail.overview.summary)}</textarea>
+            </label>
+          </div>
+        </div>
+        <div class="startup-record-column">
+          <div class="startup-record-card-block">
+            <h3>Investment Thesis</h3>
+            <label>Thesis
+              <textarea class="startup-record-richtext" data-action="detail-thesis" placeholder="Why this could be a compelling VC opportunity, and under what assumptions.">${escapeHtml(detail.overview.thesis)}</textarea>
+            </label>
+          </div>
+          <div class="startup-record-card-block">
+            <div class="row between">
+              <h3>Attachments</h3>
+              <button class="ghost" type="button" data-action="detail-add-attachment">Add Attachment</button>
+            </div>
+            <div class="startup-record-history">
+              ${detail.attachments.length ? detail.attachments.map((attachment, index) => `
+                <div class="startup-record-history-item">
+                  <div class="startup-record-dual">
+                    <label>Name
+                      <input type="text" data-action="detail-attachment-name" data-index="${index}" value="${escapeHtml(attachment.name)}" placeholder="e.g. Deck, Data Room, Meeting Notes" />
+                    </label>
+                    <label>Type
+                      <input type="text" data-action="detail-attachment-type" data-index="${index}" value="${escapeHtml(attachment.type)}" placeholder="e.g. deck, doc, link" />
+                    </label>
+                  </div>
+                  <label>URL
+                    <input type="text" data-action="detail-attachment-url" data-index="${index}" value="${escapeHtml(attachment.url)}" placeholder="https://..." />
+                  </label>
+                  <div class="row between">
+                    <span class="muted">Added ${escapeHtml(new Date(attachment.addedAt).toLocaleDateString())}</span>
+                    <button class="remove-btn" type="button" data-action="detail-remove-attachment" data-index="${index}">Remove</button>
+                  </div>
+                </div>
+              `).join('') : '<div class="startup-record-empty">No attachments added yet.</div>'}
+            </div>
+          </div>
+          <div class="startup-record-card-block">
+            <h3>Current Signals</h3>
+            <div class="decision-summary">
+              <div class="decision-item"><strong>Notes coverage</strong><span>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))} metrics documented</span></div>
+              <div class="decision-item"><strong>AI summary</strong><span>${escapeHtml(signalSummary.summary)}</span></div>
+              <div class="decision-item"><strong>Top strengths</strong><span>${escapeHtml(signalSummary.strengths.length ? signalSummary.strengths.join(' · ') : 'No AI strengths yet')}</span></div>
+              <div class="decision-item"><strong>Main risks</strong><span>${escapeHtml(signalSummary.risks.length ? signalSummary.risks.join(' · ') : 'No AI risks yet')}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.detailTab === 'scores') {
+    const evaluationMatrix = metrics.map((metric) => {
+      const analyst = num(candidate.scores?.[metric.column]);
+      const external = num(candidate.externalScores?.[metric.column]);
+      const ai = num(candidate.aiScores?.[metric.column]);
+      const blended = scoringCore.resolveMetricScore(candidate, metric.column);
+      const spreadValues = [analyst, external, ai].filter((value) => value !== null);
+      const spread = spreadValues.length >= 2 ? Math.max(...spreadValues) - Math.min(...spreadValues) : 0;
+      return `
+        <div class="evaluation-matrix-row">
+          <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
+          <span>${escapeHtml(fmt(analyst))}</span>
+          <span>${escapeHtml(fmt(external))}</span>
+          <span>${escapeHtml(fmt(ai))}</span>
+          <span>${escapeHtml(fmt(blended))}</span>
+          <span class="${spread >= 2 ? 'is-alert-text' : ''}">${escapeHtml(fmt(spread))}</span>
+        </div>
+      `;
+    }).join('');
+    els.detailTabPanel.innerHTML = `
+      <div class="startup-record-panel">
+        <div class="startup-record-section-guidance">${sectionGuidance}</div>
+        <div class="evaluation-matrix">
+          <div class="evaluation-matrix-row evaluation-matrix-head">
+            <strong>Metric</strong>
+            <span>Analyst</span>
+            <span>External</span>
+            <span>AI</span>
+            <span>Blended</span>
+            <span>Spread</span>
+          </div>
+          ${evaluationMatrix}
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.detailTab === 'notes') {
+    const noteBlocks = metrics.map((metric) => {
+      const score = num(candidate.scores?.[metric.column]);
+      const note = String(candidate.notes?.[metric.column] || '').trim();
+      const metricIndex = metrics.findIndex((item) => item.column === metric.column);
+      return `
+        <div class="startup-note-card">
+          <div class="startup-note-head">
+            <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
+            <span class="muted">Weight ${escapeHtml(fmt(metric.weight, 0))}</span>
+          </div>
+          <div class="startup-inline-grid">
+            <label class="startup-inline-field">Analyst Score
+              <select data-action="detail-score" data-column="${escapeHtml(metric.column)}">
+                ${SCORE_OPTIONS.map((value) => {
+                  const selected = (value === '' ? null : value) === score ? ' selected' : '';
+                  const text = value === '' ? '—' : String(value);
+                  return `<option value="${escapeHtml(String(value))}"${selected}>${escapeHtml(text)}</option>`;
+                }).join('')}
+              </select>
+            </label>
+            <label class="startup-inline-field">Explanation
+              <textarea rows="4" data-action="detail-note" data-column="${escapeHtml(metric.column)}" placeholder="${escapeHtml(newStartupPrompt(metric, metricIndex >= 0 ? metricIndex : 0))}">${escapeHtml(note)}</textarea>
+            </label>
+          </div>
+          <p class="metric-evidence-hint">${escapeHtml(newStartupPrompt(metric, metricIndex >= 0 ? metricIndex : 0))}</p>
+        </div>
+      `;
+    }).join('');
+    els.detailTabPanel.innerHTML = `
+      <div class="startup-record-panel">
+        <div class="startup-record-section-guidance">${sectionGuidance}</div>
+        <div class="startup-note-list">${noteBlocks}</div>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.detailTab === 'ai') {
+    const latestEvaluation = latestEvaluationFor(candidate.id);
+    const aiSummaryText = latestEvaluation?.summary?.analysis?.overallSummary || 'No AI evaluation summary yet.';
+    const strengths = signalSummary.strengths.length ? signalSummary.strengths : ['No AI strengths available yet.'];
+    const risks = signalSummary.risks.length ? signalSummary.risks : ['No AI risks available yet.'];
+    els.detailTabPanel.innerHTML = `
+      <div class="startup-record-panel startup-record-grid">
+        <div class="startup-record-column">
+          <div class="startup-record-card-block">
+            <h3>AI Summary</h3>
+            <div class="startup-record-ai-summary">${escapeHtml(aiSummaryText)}</div>
+          </div>
+          <div class="startup-record-card-block">
+            <h3>AI Rationales by Metric</h3>
+            <div class="startup-note-list">
+              ${metrics.map((metric) => `
+                <div class="startup-note-card">
+                  <div class="startup-note-head">
+                    <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
+                    <span class="muted">AI ${escapeHtml(fmt(num(candidate.aiScores?.[metric.column])))}</span>
+                  </div>
+                  <p>${escapeHtml(String(candidate.aiRationales?.[metric.column] || '').trim() || 'No AI rationale yet.')}</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="startup-record-column">
+          <div class="startup-record-card-block">
+            <h3>Decision Signals</h3>
+            <div class="startup-record-dual">
+              <div class="startup-signal-card">
+                <strong>Strengths</strong>
+                <p>${escapeHtml(strengths.join(' · '))}</p>
+              </div>
+              <div class="startup-signal-card">
+                <strong>Risks</strong>
+                <p>${escapeHtml(risks.join(' · '))}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  if (state.detailTab === 'diligence') {
+    const done = detail.diligence.checklist.filter((item) => item.done).length;
+    els.detailTabPanel.innerHTML = `
+      <div class="startup-record-panel startup-record-grid">
+        <div class="startup-record-column">
+          <div class="startup-record-card-block">
+            <h3>Diligence Status</h3>
+            <div class="startup-record-meta-grid">
+              <label>Status
+                <select data-action="detail-diligence-status">
+                  ${['not-started', 'in-progress', 'blocked', 'complete'].map((value) => `<option value="${escapeHtml(value)}"${detail.diligence.status === value ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+                </select>
+              </label>
+              <div class="slot-readonly">${escapeHtml(String(done))}/${escapeHtml(String(detail.diligence.checklist.length))} tasks done</div>
+            </div>
+          </div>
+          <div class="startup-record-card-block">
+            <h3>Checklist</h3>
+            <div class="startup-record-diligence-list">
+              ${detail.diligence.checklist.map((item, index) => `
+                <label class="startup-record-diligence-item">
+                  <input type="checkbox" data-action="detail-diligence-check" data-index="${index}"${item.done ? ' checked' : ''} />
+                  <div class="startup-record-diligence-copy">
+                    <span>${escapeHtml(item.label)}</span>
+                    <input type="text" data-action="detail-diligence-owner" data-index="${index}" value="${escapeHtml(item.owner || '')}" placeholder="Task owner" />
+                  </div>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="startup-record-column">
+          <div class="startup-record-card-block">
+            <h3>Diligence Notes</h3>
+            <label>Working Notes
+              <textarea class="startup-record-richtext" data-action="detail-diligence-notes" placeholder="Open diligence questions, missing proof points, and next checks.">${escapeHtml(detail.diligence.notes)}</textarea>
+            </label>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const historyItems = [...startupDetail(candidate).history];
+  if (!historyItems.length) {
+    historyItems.push(createHistoryEntry('system', `Startup record created for ${candidate.name}.`));
+  }
+  els.detailTabPanel.innerHTML = `
+    <div class="startup-record-panel">
+      <div class="startup-record-card-block">
+        <h3>Activity History</h3>
+        <div class="startup-record-history">
+          ${historyItems.map((item) => `
+            <div class="startup-record-history-item">
+              <div class="startup-record-history-item-head">
+                <strong>${escapeHtml(item.type)}</strong>
+                <span class="muted">${escapeHtml(new Date(item.at).toLocaleString())}</span>
+              </div>
+              <p>${escapeHtml(item.text)}</p>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderStartupDetailPage() {
+  if (!els.detailStartupSelect || !els.detailTabPanel) return;
+  const sorted = [...state.candidates].sort((a, b) => a.name.localeCompare(b.name));
+  els.detailStartupSelect.innerHTML = sorted.map((candidate) => (
+    `<option value="${escapeHtml(candidate.id)}"${candidate.id === state.detailStartupId ? ' selected' : ''}>${escapeHtml(candidate.name)}</option>`
+  )).join('');
+  if (!state.detailStartupId || !sorted.some((candidate) => candidate.id === state.detailStartupId)) {
+    state.detailStartupId = sorted[0]?.id || null;
+  }
+  if (els.detailStartupSelect.value !== (state.detailStartupId || '')) {
+    els.detailStartupSelect.value = state.detailStartupId || '';
+  }
+  [...(els.detailTabs?.querySelectorAll('[data-detail-tab]') || [])].forEach((button) => {
+    button.classList.toggle('is-active', button.dataset.detailTab === state.detailTab);
+  });
+  const candidate = getDetailCandidate();
+  els.detailCompareBtn.disabled = !candidate || state.candidates.length < 2;
+  els.detailQueueBtn.disabled = !candidate || !state.serverMode;
+  renderStartupRecordHero(candidate);
+  renderStartupRecordTabContent(candidate);
 }
 
 function renderWeights() {
@@ -2813,7 +3458,7 @@ function renderWeights() {
   els.presetSelect.value = state.weightPreset;
   const movers = previewRankChanges();
   const changed = draftWeightsChanged();
-  const visibleWeightMetrics = getMetrics().filter((metric) => !['J', 'K', 'L'].includes(metric.column));
+  const visibleWeightMetrics = getMetrics();
 
   visibleWeightMetrics.forEach((m) => {
     const row = document.createElement('div');
@@ -2875,7 +3520,7 @@ function renderWeights() {
   }
   els.weightPreviewSummary.appendChild(impact);
 
-  const rubrics = getRubrics().filter((rubric) => !['J', 'K', 'L'].includes(rubric.column));
+  const rubrics = getRubrics();
   const current = els.rubricMetric.value || rubrics[0]?.column;
   els.rubricMetric.innerHTML = '';
   rubrics.forEach((r) => {
@@ -2887,6 +3532,315 @@ function renderWeights() {
   if ([...els.rubricMetric.options].some((o) => o.value === current)) els.rubricMetric.value = current;
   const r = rubrics.find((x) => x.column === els.rubricMetric.value);
   els.rubricText.textContent = r?.rubric || 'No rubric available.';
+  populateMetricEditor();
+}
+
+function setMetricEditorStatus(message, type = 'neutral') {
+  if (!els.metricEditorStatus) return;
+  els.metricEditorStatus.textContent = message;
+  els.metricEditorStatus.dataset.type = type;
+}
+
+function setSectionEditorStatus(message, type = 'neutral') {
+  if (!els.sectionEditorStatus) return;
+  els.sectionEditorStatus.textContent = message;
+  els.sectionEditorStatus.dataset.type = type;
+}
+
+function selectedMetricDefinition() {
+  return getMetrics().find((metric) => metric.column === els.rubricMetric.value) || getMetrics()[0] || null;
+}
+
+function selectedSectionDefinition() {
+  return getSections().find((section) => section.key === els.sectionEditorSelect?.value) || getSections()[0] || null;
+}
+
+function selectMetricById(metricId) {
+  const metric = getMetrics().find((item) => item.id === metricId);
+  if (!metric) return;
+  els.rubricMetric.value = metric.column;
+  populateMetricEditor();
+}
+
+function selectSectionByKey(sectionKey) {
+  const section = getSections().find((item) => item.key === sectionKey);
+  if (!section) return;
+  els.sectionEditorSelect.value = section.key;
+  populateSectionEditor();
+}
+
+function refreshSectionOptionLists() {
+  const sections = getSections();
+
+  const metricCurrent = els.metricSectionInput.value || selectedMetricDefinition()?.sectionKey || sections[0]?.key || 'custom';
+  els.metricSectionInput.innerHTML = '';
+  sections.forEach((section) => {
+    const option = document.createElement('option');
+    option.value = section.key;
+    option.textContent = section.title;
+    els.metricSectionInput.appendChild(option);
+  });
+  if (sections.length && [...els.metricSectionInput.options].some((option) => option.value === metricCurrent)) {
+    els.metricSectionInput.value = metricCurrent;
+  } else if (sections[0]) {
+    els.metricSectionInput.value = sections[0].key;
+  }
+
+  const sectionCurrent = els.sectionEditorSelect.value || sections[0]?.key || '';
+  els.sectionEditorSelect.innerHTML = '';
+  sections.forEach((section) => {
+    const option = document.createElement('option');
+    option.value = section.key;
+    option.textContent = section.title;
+    els.sectionEditorSelect.appendChild(option);
+  });
+  if (sections.length && [...els.sectionEditorSelect.options].some((option) => option.value === sectionCurrent)) {
+    els.sectionEditorSelect.value = sectionCurrent;
+  } else if (sections[0]) {
+    els.sectionEditorSelect.value = sections[0].key;
+  }
+}
+
+function populateSectionEditor() {
+  const section = selectedSectionDefinition();
+  if (!section) {
+    if (els.sectionNameInput) els.sectionNameInput.value = '';
+    if (els.sectionKeyInput) els.sectionKeyInput.value = '';
+    if (els.sectionDescriptionInput) els.sectionDescriptionInput.value = '';
+    return;
+  }
+  els.sectionNameInput.value = section.title || '';
+  els.sectionKeyInput.value = section.key || '';
+  els.sectionDescriptionInput.value = section.description || '';
+  if (els.moveSectionUpBtn) els.moveSectionUpBtn.disabled = getSections().findIndex((item) => item.key === section.key) <= 0;
+  if (els.moveSectionDownBtn) els.moveSectionDownBtn.disabled = getSections().findIndex((item) => item.key === section.key) >= getSections().length - 1;
+  if (els.deleteSectionBtn) els.deleteSectionBtn.disabled = getSections().length <= 1;
+}
+
+function populateMetricEditor() {
+  refreshSectionOptionLists();
+  const metric = selectedMetricDefinition();
+  if (!metric) {
+    if (els.metricNameInput) els.metricNameInput.value = '';
+    if (els.metricWeightInput) els.metricWeightInput.value = '';
+    if (els.metricSectionInput) els.metricSectionInput.value = 'custom';
+    if (els.metricGroupInput) els.metricGroupInput.value = 'other';
+    if (els.metricPromptsInput) els.metricPromptsInput.value = '';
+    [els.metricScore1, els.metricScore2, els.metricScore3, els.metricScore4, els.metricScore5].forEach((el) => {
+      if (el) el.value = '';
+    });
+    populateSectionEditor();
+    return;
+  }
+  els.metricNameInput.value = metric.label || '';
+  els.metricWeightInput.value = String(metric.weight ?? 0);
+  els.metricSectionInput.value = metric.sectionKey || 'custom';
+  els.metricGroupInput.value = metric.group || 'other';
+  els.metricPromptsInput.value = metricEvidencePrompts(metric).join('\n');
+  els.metricScore1.value = metric.scoreDescriptions?.[1] || '';
+  els.metricScore2.value = metric.scoreDescriptions?.[2] || '';
+  els.metricScore3.value = metric.scoreDescriptions?.[3] || '';
+  els.metricScore4.value = metric.scoreDescriptions?.[4] || '';
+  els.metricScore5.value = metric.scoreDescriptions?.[5] || '';
+  if (els.moveMetricUpBtn) els.moveMetricUpBtn.disabled = getMetrics().findIndex((item) => item.column === metric.column) <= 0;
+  if (els.moveMetricDownBtn) els.moveMetricDownBtn.disabled = getMetrics().findIndex((item) => item.column === metric.column) >= getMetrics().length - 1;
+  if (els.deleteMetricBtn) els.deleteMetricBtn.disabled = getMetrics().length <= 1;
+  populateSectionEditor();
+}
+
+function buildMetricDefinitionFromEditor(existingMetric = null) {
+  const label = els.metricNameInput.value.trim();
+  const sectionKey = els.metricSectionInput.value || 'custom';
+  const sectionLabel = metricModel.sectionLabelFor(sectionKey);
+  return {
+    ...(existingMetric || {}),
+    label: label || existingMetric?.label || 'New Metric',
+    sectionKey,
+    sectionLabel,
+    group: els.metricGroupInput.value || 'other',
+    weight: num(els.metricWeightInput.value) ?? Number(existingMetric?.weight ?? 5),
+    evidencePrompts: String(els.metricPromptsInput.value || '')
+      .split(/\r?\n+/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+    scoreDescriptions: {
+      1: els.metricScore1.value.trim(),
+      2: els.metricScore2.value.trim(),
+      3: els.metricScore3.value.trim(),
+      4: els.metricScore4.value.trim(),
+      5: els.metricScore5.value.trim(),
+    },
+  };
+}
+
+function reorderItems(items, fromIndex, toIndex) {
+  if (fromIndex < 0 || toIndex < 0 || fromIndex >= items.length || toIndex >= items.length) return items;
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function normalizeMetricsForSave(metrics) {
+  return metrics.map((metric, index) => ({
+    ...metric,
+    column: String.fromCharCode(65 + index),
+  }));
+}
+
+function buildSectionMap(sections) {
+  return new Map((sections || []).map((section) => [section.key, section.title]));
+}
+
+function uniqueSectionKey(baseKey) {
+  const existing = new Set(getSections().map((section) => section.key));
+  let nextKey = baseKey || 'section';
+  let counter = 2;
+  while (existing.has(nextKey)) {
+    nextKey = `${baseKey}-${counter}`;
+    counter += 1;
+  }
+  return nextKey;
+}
+
+function applySectionTitlesToMetrics(metrics, sections) {
+  const sectionMap = buildSectionMap(sections);
+  return metrics.map((metric) => ({
+    ...metric,
+    sectionLabel: sectionMap.get(metric.sectionKey) || metric.sectionLabel || metricModel.sectionLabelFor(metric.sectionKey),
+  }));
+}
+
+function removeMetricByColumn(metrics, column) {
+  return normalizeMetricsForSave(metrics.filter((metric) => metric.column !== column));
+}
+
+function buildSectionDefinitionFromEditor(existingSection = null) {
+  const title = els.sectionNameInput.value.trim();
+  const key = existingSection?.key || uniqueSectionKey(metricModel.slugify(title || `section-${getSections().length + 1}`));
+  return metricModel.normalizeSection({
+    key,
+    title: title || existingSection?.title || 'New Section',
+    description: els.sectionDescriptionInput.value.trim(),
+  });
+}
+
+async function persistModelUpdate(nextModel, successMessage) {
+  try {
+    const normalizedModel = metricModel.normalizeModel(nextModel);
+    if (state.serverMode) {
+      state.model = metricModel.normalizeModel(await apiJson(MODEL_URL, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(normalizedModel),
+      }));
+    } else {
+      state.model = normalizedModel;
+    }
+    state.candidates = state.candidates.map((candidate, index) => ({
+      ...metricModel.normalizeCandidate(candidate, state.model, index),
+      computed: candidate.computed || { nonFinancial: 0, financial: 0, total: 0 },
+    }));
+    state.newDraft = normalizeDraftData(state.newDraft);
+    state.newStartupDrafts = state.newStartupDrafts.map((draft) => normalizeDraftLibraryEntry(draft)).filter(Boolean);
+    recomputeAll();
+    setDraftWeightsFromModel();
+    state.weightPreviewData = null;
+    save();
+    renderAll();
+    refreshRemoteDerivedData({ workflow: false, render: false }).then(() => renderAnalysisPanels()).catch(console.error);
+    setMetricEditorStatus(successMessage, 'success');
+  } catch (error) {
+    console.error(error);
+    setMetricEditorStatus(error.message, 'error');
+  }
+}
+
+async function persistStartupDetailPatch(candidateId, patch, options = {}) {
+  const { rerender = false, successMessage = 'Saved.' } = options;
+  const candidate = getCandidateById(candidateId);
+  if (!candidate) return;
+
+  try {
+    if (state.serverMode) {
+      const saved = await updateStartupRemote(candidateId, patch);
+      Object.assign(candidate, saved);
+    }
+    recomputeAll();
+    save();
+    if (rerender) {
+      renderAll();
+    } else {
+      renderSelectedStartupBrief();
+      renderAnalysisActionBoard();
+      renderAiWorkflow();
+    }
+    setDetailStatus(successMessage, 'success');
+  } catch (error) {
+    console.error(error);
+    setDetailStatus(error.message, 'error');
+    if (rerender) renderAll();
+  }
+}
+
+async function persistBriefPatch(candidateId, patch, options = {}) {
+  const { rerender = true, successMessage = 'Saved.' } = options;
+  const candidate = getCandidateById(candidateId);
+  if (!candidate) return;
+
+  try {
+    if (state.serverMode) {
+      const saved = await updateStartupRemote(candidateId, patch);
+      Object.assign(candidate, saved);
+    }
+    recomputeAll();
+    save();
+    if (rerender) {
+      renderSelectedStartupBrief();
+      renderAnalysisActionBoard();
+      renderTable();
+      renderAiWorkflow();
+    }
+    setBriefEditStatus(successMessage, 'success');
+  } catch (error) {
+    console.error(error);
+    setBriefEditStatus(error.message, 'error');
+    if (rerender) {
+      renderSelectedStartupBrief();
+      renderAnalysisActionBoard();
+      renderTable();
+      renderAiWorkflow();
+    }
+  }
+}
+
+function scheduleBriefTagsSave(candidateId) {
+  const key = `${candidateId}:tags`;
+  clearTimeout(state.briefPersistTimers[key]);
+  state.briefPersistTimers[key] = window.setTimeout(() => {
+    const candidate = getCandidateById(candidateId);
+    if (!candidate) return;
+    persistBriefPatch(candidateId, {
+      tags: [...candidateTags(candidate)],
+    }, {
+      rerender: true,
+      successMessage: 'Tags saved.',
+    }).catch(console.error);
+  }, 450);
+}
+
+function flushBriefTagsSave(candidateId) {
+  const key = `${candidateId}:tags`;
+  clearTimeout(state.briefPersistTimers[key]);
+  delete state.briefPersistTimers[key];
+  const candidate = getCandidateById(candidateId);
+  if (!candidate) return Promise.resolve();
+  return persistBriefPatch(candidateId, {
+    tags: [...candidateTags(candidate)],
+  }, {
+    rerender: true,
+    successMessage: 'Tags saved.',
+  });
 }
 
 function renderControls() {
@@ -2912,6 +3866,7 @@ function renderAll() {
   renderControls();
   renderScatter();
   renderAnalysisPanels();
+  renderStartupDetailPage();
   renderCompare();
   renderNewForm();
   renderTable();
@@ -3145,14 +4100,129 @@ function attachEvents() {
   els.briefPipelineBtn?.addEventListener('click', () => {
     const selected = getCandidateById(state.scatterSelectedId);
     if (!selected) return;
-    state.search = selected.name;
-    state.activePane = 'table';
+    openStartupDetail(selected.id, 'overview');
+  });
+
+  els.detailStartupSelect?.addEventListener('change', () => {
+    state.detailStartupId = els.detailStartupSelect.value || null;
+    save();
+    renderStartupDetailPage();
+  });
+
+  els.detailCompareBtn?.addEventListener('click', () => {
+    const candidate = getDetailCandidate();
+    if (!candidate) return;
+    const benchmark = topCandidateExcluding(candidate.id);
+    state.compareA = candidate.id;
+    state.compareB = benchmark?.id || state.compareB || candidate.id;
+    state.activePane = 'compare';
     save();
     renderAll();
   });
 
+  els.detailQueueBtn?.addEventListener('click', async () => {
+    const candidate = getDetailCandidate();
+    if (!candidate || !state.serverMode) return;
+    try {
+      await apiJson(EVALUATION_JOBS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startupId: candidate.id,
+          requestedBy: 'startup-detail',
+          payload: { trigger: 'startup-record' },
+        }),
+      });
+      state.aiSelectedStartupId = candidate.id;
+      setDetailStatus(`Evaluation job queued for ${candidate.name}.`, 'success');
+      await refreshEvaluationWorkflow({ render: false });
+      renderStartupDetailPage();
+      renderAiWorkflow();
+    } catch (error) {
+      setDetailStatus(error.message, 'error');
+    }
+  });
+
+  els.detailTabs?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const tab = target.dataset.detailTab;
+    if (!tab) return;
+    state.detailTab = tab;
+    save();
+    renderStartupDetailPage();
+  });
+
+  els.detailTabPanel?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const candidate = getDetailCandidate();
+    if (!candidate) return;
+    const detail = startupDetail(candidate);
+
+    if (target.dataset.action === 'detail-add-attachment') {
+      candidate.detail = {
+        ...detail,
+        attachments: [
+          ...detail.attachments,
+          { id: uid(), name: '', type: '', url: '', addedAt: new Date().toISOString() },
+        ],
+      };
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Attachment added.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-remove-attachment') {
+      const index = Number(target.dataset.index);
+      candidate.detail = {
+        ...detail,
+        attachments: detail.attachments.filter((_, itemIndex) => itemIndex !== index),
+      };
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Attachment removed.' }).catch(console.error);
+    }
+  });
+
+  els.selectedStartupBrief?.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action !== 'brief-edit-stage' || !(target instanceof HTMLSelectElement)) return;
+    const candidate = getCandidateById(target.dataset.id);
+    if (!candidate) return;
+    candidate.stage = target.value;
+    setBriefEditStatus('Saving stage…', 'neutral');
+    persistBriefPatch(candidate.id, {
+      stage: target.value,
+    }, {
+      rerender: true,
+      successMessage: 'Stage saved.',
+    }).catch(console.error);
+  });
+
+  els.selectedStartupBrief?.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action !== 'brief-edit-tags' || !(target instanceof HTMLInputElement)) return;
+    const candidate = getCandidateById(target.dataset.id);
+    if (!candidate) return;
+    candidate.tags = normalizeTagList(target.value);
+    setBriefEditStatus('Unsaved tag changes…', 'neutral');
+    scheduleBriefTagsSave(candidate.id);
+  });
+
+  els.selectedStartupBrief?.addEventListener('focusout', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action !== 'brief-edit-tags' || !(target instanceof HTMLInputElement)) return;
+    flushBriefTagsSave(target.dataset.id).catch(console.error);
+  });
+
   els.searchInput.addEventListener('input', () => {
     state.search = els.searchInput.value;
+    clearActivePipelineFilterSelection();
     save();
     renderTable();
     renderScatter();
@@ -3160,6 +4230,7 @@ function attachEvents() {
 
   els.sortSelect.addEventListener('change', () => {
     state.sort = els.sortSelect.value;
+    clearActivePipelineFilterSelection();
     save();
     renderTable();
     renderScatter();
@@ -3168,6 +4239,7 @@ function attachEvents() {
 
   els.quadrantSelect.addEventListener('change', () => {
     state.quadrant = els.quadrantSelect.value;
+    clearActivePipelineFilterSelection();
     save();
     renderTable();
     renderScatter();
@@ -3176,11 +4248,68 @@ function attachEvents() {
 
   els.savedViewSelect.addEventListener('change', () => {
     state.savedView = els.savedViewSelect.value;
+    clearActivePipelineFilterSelection();
     state.selectedRows = [];
     save();
     renderTable();
     renderScatter();
     renderAnalysisPanels();
+  });
+
+  els.pipelineFilterSelect?.addEventListener('change', () => {
+    const selectedId = els.pipelineFilterSelect.value || '';
+    state.selectedPipelineFilterId = selectedId;
+    const selectedFilter = state.pipelineSavedFilters.find((filter) => filter.id === selectedId) || null;
+    if (selectedFilter) {
+      applyPipelineFilterSnapshot(selectedFilter);
+      state.selectedRows = [];
+    }
+    save();
+    renderControls();
+    renderTable();
+    renderScatter();
+    renderAnalysisPanels();
+  });
+
+  els.savePipelineFilterBtn?.addEventListener('click', () => {
+    const name = String(els.pipelineFilterName?.value || '').trim();
+    if (!name) return;
+    const snapshot = currentPipelineFilterSnapshot();
+    const existingIndex = state.pipelineSavedFilters.findIndex((filter) => filter.name.toLowerCase() === name.toLowerCase());
+    const nextFilter = {
+      id: existingIndex >= 0 ? state.pipelineSavedFilters[existingIndex].id : uid(),
+      name,
+      ...snapshot,
+    };
+    if (existingIndex >= 0) {
+      state.pipelineSavedFilters.splice(existingIndex, 1, nextFilter);
+    } else {
+      state.pipelineSavedFilters.unshift(nextFilter);
+    }
+    state.selectedPipelineFilterId = nextFilter.id;
+    save();
+    renderTable();
+  });
+
+  els.deletePipelineFilterBtn?.addEventListener('click', () => {
+    if (!state.selectedPipelineFilterId) return;
+    state.pipelineSavedFilters = state.pipelineSavedFilters.filter((filter) => filter.id !== state.selectedPipelineFilterId);
+    state.selectedPipelineFilterId = '';
+    save();
+    renderTable();
+  });
+
+  els.pipelineColumnList?.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.dataset.action !== 'toggle-pipeline-column') return;
+    const set = new Set(normalizePipelineColumns(state.pipelineColumns));
+    if (target.checked) set.add(target.value);
+    else set.delete(target.value);
+    state.pipelineColumns = normalizePipelineColumns([...set]);
+    clearActivePipelineFilterSelection();
+    save();
+    renderTable();
   });
 
   els.selectVisibleToggle.addEventListener('change', () => {
@@ -3248,9 +4377,7 @@ function attachEvents() {
     if (target.closest('input, select, button, textarea, label')) return;
     const row = target.closest('tr[data-id]');
     if (!row) return;
-    state.selectedTableStartupId = row.dataset.id;
-    save();
-    renderTable();
+    openStartupDetail(row.dataset.id, 'overview');
   });
 
   els.table.addEventListener('keydown', (event) => {
@@ -3261,9 +4388,7 @@ function attachEvents() {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     if (target.closest('input, select, button, textarea')) return;
     event.preventDefault();
-    state.selectedTableStartupId = row.dataset.id;
-    save();
-    renderTable();
+    openStartupDetail(row.dataset.id, 'overview');
   });
 
   els.table.addEventListener('change', (event) => {
@@ -3307,40 +4432,28 @@ function attachEvents() {
       candidate.stage = target.value;
       save();
       renderTable();
+      return;
     }
-  });
 
-  els.tableDetailCompareBtn?.addEventListener('click', () => {
-    const candidate = getCandidateById(state.selectedTableStartupId);
-    if (!candidate) return;
-    const benchmark = topCandidateExcluding(candidate.id);
-    state.compareA = candidate.id;
-    state.compareB = benchmark?.id || state.compareB || candidate.id;
-    state.activePane = 'compare';
-    save();
-    renderAll();
-  });
-
-  els.tableDetailQueueBtn?.addEventListener('click', async () => {
-    const candidate = getCandidateById(state.selectedTableStartupId);
-    if (!candidate || !state.serverMode) return;
-    try {
-      await apiJson(EVALUATION_JOBS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          startupId: candidate.id,
-          requestedBy: 'table-detail',
-          payload: { trigger: 'pipeline-detail' },
-        }),
-      });
-      state.aiSelectedStartupId = candidate.id;
-      state.aiStatusText = `Evaluation job queued for ${candidate.name}.`;
-      await refreshEvaluationWorkflow({ render: false });
-      renderTableDetail();
-      renderAiWorkflow();
-    } catch (error) {
-      alert(error.message);
+    if (target.dataset.action === 'edit-owner' && target instanceof HTMLInputElement) {
+      const candidate = getCandidateById(target.dataset.id);
+      if (!candidate) return;
+      const detail = startupDetail(candidate);
+      candidate.detail = {
+        ...detail,
+        overview: {
+          ...detail.overview,
+          owner: target.value.trim(),
+        },
+      };
+      if (state.serverMode) {
+        persistStartupDetailPatch(candidate.id, {
+          detail: candidate.detail,
+        }, { rerender: true, successMessage: 'Owner saved.' }).catch(console.error);
+        return;
+      }
+      save();
+      renderTable();
     }
   });
 
@@ -3350,11 +4463,7 @@ function attachEvents() {
     if (target.dataset.action === 'analysis-open-pipeline') {
       const candidate = getCandidateById(target.dataset.id);
       if (!candidate) return;
-      state.selectedTableStartupId = candidate.id;
-      state.search = candidate.name;
-      state.activePane = 'table';
-      save();
-      renderAll();
+      openStartupDetail(candidate.id, 'overview');
       return;
     }
     if (target.dataset.action === 'analysis-compare-top') {
@@ -3390,22 +4499,6 @@ function attachEvents() {
       }
       return;
     }
-    if (target.id !== 'tableDetailApplyStageBtn') return;
-    const candidate = getCandidateById(state.selectedTableStartupId);
-    const select = document.getElementById('tableDetailStageSelect');
-    if (!candidate || !(select instanceof HTMLSelectElement)) return;
-    try {
-      if (state.serverMode) {
-        const saved = await updateStartupRemote(candidate.id, { stage: select.value });
-        Object.assign(candidate, saved);
-      } else {
-        candidate.stage = select.value;
-      }
-      save();
-      renderTable();
-    } catch (error) {
-      alert(error.message);
-    }
   });
 
   els.table.addEventListener('change', (event) => {
@@ -3430,6 +4523,276 @@ function attachEvents() {
       }
       candidate.tags = nextTags;
       save();
+    }
+  });
+
+  els.detailTabPanel?.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const candidate = getDetailCandidate();
+    if (!candidate) return;
+
+    if (target.dataset.action === 'detail-stage' && target instanceof HTMLSelectElement) {
+      candidate.stage = target.value;
+      setDetailStatus('Saving stage…', 'neutral');
+      persistStartupDetailPatch(candidate.id, {
+        stage: target.value,
+      }, { rerender: true, successMessage: 'Stage saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-score' && target instanceof HTMLSelectElement) {
+      candidate.scores = {
+        ...(candidate.scores || {}),
+        [target.dataset.column]: num(target.value),
+      };
+      setDetailStatus('Saving analyst score…', 'neutral');
+      persistStartupDetailPatch(candidate.id, {
+        scores: { ...(candidate.scores || {}) },
+      }, { rerender: true, successMessage: 'Analyst score saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-diligence-status' && target instanceof HTMLSelectElement) {
+      const detail = startupDetail(candidate);
+      candidate.detail = {
+        ...detail,
+        diligence: {
+          ...detail.diligence,
+          status: target.value,
+        },
+      };
+      setDetailStatus('Saving diligence status…', 'neutral');
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Diligence status saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-diligence-check' && target instanceof HTMLInputElement) {
+      const detail = startupDetail(candidate);
+      const index = Number(target.dataset.index);
+      const checklist = detail.diligence.checklist.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, done: target.checked } : item
+      ));
+      candidate.detail = {
+        ...detail,
+        diligence: {
+          ...detail.diligence,
+          checklist,
+        },
+      };
+      setDetailStatus('Saving diligence checklist…', 'neutral');
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Checklist saved.' }).catch(console.error);
+      return;
+    }
+
+  });
+
+  els.detailTabPanel?.addEventListener('input', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const candidate = getDetailCandidate();
+    if (!candidate) return;
+    const detail = startupDetail(candidate);
+
+    if (target.dataset.action === 'detail-tags' && target instanceof HTMLInputElement) {
+      candidate.tags = normalizeTagList(target.value);
+      setDetailStatus('Unsaved tag changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-owner' && target instanceof HTMLInputElement) {
+      candidate.detail = {
+        ...detail,
+        overview: {
+          ...detail.overview,
+          owner: target.value,
+        },
+      };
+      setDetailStatus('Unsaved owner changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-next-step' && target instanceof HTMLInputElement) {
+      candidate.detail = {
+        ...detail,
+        overview: {
+          ...detail.overview,
+          nextStep: target.value,
+        },
+      };
+      setDetailStatus('Unsaved next-step changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-summary' && target instanceof HTMLTextAreaElement) {
+      candidate.detail = {
+        ...detail,
+        overview: {
+          ...detail.overview,
+          summary: target.value,
+        },
+      };
+      setDetailStatus('Unsaved summary changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-thesis' && target instanceof HTMLTextAreaElement) {
+      candidate.detail = {
+        ...detail,
+        overview: {
+          ...detail.overview,
+          thesis: target.value,
+        },
+      };
+      setDetailStatus('Unsaved thesis changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-note' && target instanceof HTMLTextAreaElement) {
+      candidate.notes = {
+        ...(candidate.notes || {}),
+        [target.dataset.column]: target.value,
+      };
+      setDetailStatus('Unsaved note changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-diligence-notes' && target instanceof HTMLTextAreaElement) {
+      candidate.detail = {
+        ...detail,
+        diligence: {
+          ...detail.diligence,
+          notes: target.value,
+        },
+      };
+      setDetailStatus('Unsaved diligence note changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-diligence-owner' && target instanceof HTMLInputElement) {
+      const index = Number(target.dataset.index);
+      candidate.detail = {
+        ...detail,
+        diligence: {
+          ...detail.diligence,
+          checklist: detail.diligence.checklist.map((item, itemIndex) => (
+            itemIndex === index ? { ...item, owner: target.value } : item
+          )),
+        },
+      };
+      setDetailStatus('Unsaved diligence owner changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-attachment-name' && target instanceof HTMLInputElement) {
+      const index = Number(target.dataset.index);
+      candidate.detail = {
+        ...detail,
+        attachments: detail.attachments.map((item, itemIndex) => (
+          itemIndex === index ? { ...item, name: target.value } : item
+        )),
+      };
+      setDetailStatus('Unsaved attachment changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-attachment-type' && target instanceof HTMLInputElement) {
+      const index = Number(target.dataset.index);
+      candidate.detail = {
+        ...detail,
+        attachments: detail.attachments.map((item, itemIndex) => (
+          itemIndex === index ? { ...item, type: target.value } : item
+        )),
+      };
+      setDetailStatus('Unsaved attachment changes…', 'neutral');
+      return;
+    }
+
+    if (target.dataset.action === 'detail-attachment-url' && target instanceof HTMLInputElement) {
+      const index = Number(target.dataset.index);
+      candidate.detail = {
+        ...detail,
+        attachments: detail.attachments.map((item, itemIndex) => (
+          itemIndex === index ? { ...item, url: target.value } : item
+        )),
+      };
+      setDetailStatus('Unsaved attachment changes…', 'neutral');
+    }
+  });
+
+  els.detailTabPanel?.addEventListener('focusout', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const candidate = getDetailCandidate();
+    if (!candidate) return;
+
+    if (target.dataset.action === 'detail-tags' && target instanceof HTMLInputElement) {
+      persistStartupDetailPatch(candidate.id, {
+        tags: [...candidateTags(candidate)],
+      }, { rerender: true, successMessage: 'Tags saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-owner' && target instanceof HTMLInputElement) {
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Owner saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-next-step' && target instanceof HTMLInputElement) {
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Next step saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-summary' && target instanceof HTMLTextAreaElement) {
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Summary saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-thesis' && target instanceof HTMLTextAreaElement) {
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Thesis saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-note' && target instanceof HTMLTextAreaElement) {
+      persistStartupDetailPatch(candidate.id, {
+        notes: { ...(candidate.notes || {}) },
+      }, { rerender: true, successMessage: 'Note saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-diligence-notes' && target instanceof HTMLTextAreaElement) {
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Diligence notes saved.' }).catch(console.error);
+      return;
+    }
+
+    if (target.dataset.action === 'detail-diligence-owner' && target instanceof HTMLInputElement) {
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Task owner saved.' }).catch(console.error);
+      return;
+    }
+
+    if ((target.dataset.action === 'detail-attachment-name'
+      || target.dataset.action === 'detail-attachment-type'
+      || target.dataset.action === 'detail-attachment-url')
+      && target instanceof HTMLInputElement) {
+      persistStartupDetailPatch(candidate.id, {
+        detail: candidate.detail,
+      }, { rerender: true, successMessage: 'Attachment saved.' }).catch(console.error);
     }
   });
 
@@ -3490,15 +4853,25 @@ function attachEvents() {
           body: JSON.stringify(state.draftWeights),
         });
         if (Array.isArray(result.weights)) {
-          state.model.weights = result.weights;
+          state.model = metricModel.normalizeModel({
+            ...state.model,
+            metrics: getMetrics().map((metric) => ({
+              ...metric,
+              weight: Number(state.draftWeights[metric.column] ?? metric.weight) || 0,
+            })),
+          });
         }
       } catch (error) {
         alert(error.message);
         return;
       }
     } else {
-      getMetrics().forEach((metric) => {
-        metric.weight = Number(state.draftWeights[metric.column] ?? metric.weight) || 0;
+      state.model = metricModel.normalizeModel({
+        ...state.model,
+        metrics: getMetrics().map((metric) => ({
+          ...metric,
+          weight: Number(state.draftWeights[metric.column] ?? metric.weight) || 0,
+        })),
       });
     }
     recomputeAll();
@@ -3520,6 +4893,171 @@ function attachEvents() {
   els.rubricMetric.addEventListener('change', () => {
     const r = getRubrics().find((x) => x.column === els.rubricMetric.value);
     els.rubricText.textContent = r?.rubric || 'No rubric available.';
+    populateMetricEditor();
+  });
+
+  els.sectionEditorSelect?.addEventListener('change', populateSectionEditor);
+
+  els.addMetricBtn?.addEventListener('click', async () => {
+    const baseMetric = buildMetricDefinitionFromEditor();
+    if (!baseMetric.label.trim()) {
+      setMetricEditorStatus('Metric name is required.', 'error');
+      return;
+    }
+    const nextMetric = metricModel.createEmptyMetric(getMetrics().length, baseMetric);
+    const nextModel = metricModel.normalizeModel({
+      ...state.model,
+      metrics: [...getMetrics(), nextMetric],
+    });
+    await persistModelUpdate(nextModel, `Added ${nextMetric.label}.`);
+    selectMetricById(nextMetric.id);
+    renderWeights();
+  });
+
+  els.saveMetricBtn?.addEventListener('click', async () => {
+    const currentMetric = selectedMetricDefinition();
+    if (!currentMetric) {
+      setMetricEditorStatus('No metric selected.', 'error');
+      return;
+    }
+    const updatedMetric = buildMetricDefinitionFromEditor(currentMetric);
+    const nextModel = metricModel.normalizeModel({
+      ...state.model,
+      metrics: getMetrics().map((metric) => (metric.column === currentMetric.column ? updatedMetric : metric)),
+    });
+    await persistModelUpdate(nextModel, `Saved ${updatedMetric.label}.`);
+    selectMetricById(currentMetric.id);
+    renderWeights();
+  });
+
+  els.moveMetricUpBtn?.addEventListener('click', async () => {
+    const currentMetric = selectedMetricDefinition();
+    if (!currentMetric) return;
+    const currentIndex = getMetrics().findIndex((metric) => metric.id === currentMetric.id);
+    if (currentIndex <= 0) return;
+    const nextMetrics = normalizeMetricsForSave(reorderItems(getMetrics(), currentIndex, currentIndex - 1));
+    await persistModelUpdate({
+      ...state.model,
+      metrics: nextMetrics,
+      sections: getSections(),
+    }, `Moved ${currentMetric.label} up.`);
+    renderWeights();
+    selectMetricById(currentMetric.id);
+  });
+
+  els.moveMetricDownBtn?.addEventListener('click', async () => {
+    const currentMetric = selectedMetricDefinition();
+    if (!currentMetric) return;
+    const currentIndex = getMetrics().findIndex((metric) => metric.id === currentMetric.id);
+    if (currentIndex < 0 || currentIndex >= getMetrics().length - 1) return;
+    const nextMetrics = normalizeMetricsForSave(reorderItems(getMetrics(), currentIndex, currentIndex + 1));
+    await persistModelUpdate({
+      ...state.model,
+      metrics: nextMetrics,
+      sections: getSections(),
+    }, `Moved ${currentMetric.label} down.`);
+    renderWeights();
+    selectMetricById(currentMetric.id);
+  });
+
+  els.deleteMetricBtn?.addEventListener('click', async () => {
+    const currentMetric = selectedMetricDefinition();
+    if (!currentMetric || getMetrics().length <= 1) return;
+    const nextMetrics = removeMetricByColumn(getMetrics(), currentMetric.column);
+    const fallbackMetric = nextMetrics[Math.max(0, getMetrics().findIndex((metric) => metric.id === currentMetric.id) - 1)] || nextMetrics[0];
+    await persistModelUpdate({
+      ...state.model,
+      metrics: nextMetrics,
+      sections: getSections(),
+    }, `Deleted ${currentMetric.label}.`);
+    renderWeights();
+    if (fallbackMetric) selectMetricById(fallbackMetric.id);
+  });
+
+  els.addSectionBtn?.addEventListener('click', async () => {
+    const nextSection = metricModel.createEmptySection(getSections().length, {
+      title: els.sectionNameInput.value.trim() || `New Section ${getSections().length + 1}`,
+    });
+    const nextSections = [...getSections(), nextSection];
+    await persistModelUpdate({
+      ...state.model,
+      sections: nextSections,
+      metrics: applySectionTitlesToMetrics(getMetrics(), nextSections),
+    }, `Added ${nextSection.title}.`);
+    setSectionEditorStatus(`Added ${nextSection.title}.`, 'success');
+    renderWeights();
+    selectSectionByKey(nextSection.key);
+  });
+
+  els.saveSectionBtn?.addEventListener('click', async () => {
+    const currentSection = selectedSectionDefinition();
+    if (!currentSection) {
+      setSectionEditorStatus('No section selected.', 'error');
+      return;
+    }
+    const updatedSection = buildSectionDefinitionFromEditor(currentSection);
+    const nextSections = getSections().map((section) => (section.key === currentSection.key ? updatedSection : section));
+    await persistModelUpdate({
+      ...state.model,
+      sections: nextSections,
+      metrics: applySectionTitlesToMetrics(getMetrics(), nextSections),
+    }, `Saved ${updatedSection.title}.`);
+    setSectionEditorStatus(`Saved ${updatedSection.title}.`, 'success');
+    renderWeights();
+    selectSectionByKey(updatedSection.key);
+  });
+
+  els.moveSectionUpBtn?.addEventListener('click', async () => {
+    const currentSection = selectedSectionDefinition();
+    if (!currentSection) return;
+    const currentIndex = getSections().findIndex((section) => section.key === currentSection.key);
+    if (currentIndex <= 0) return;
+    const nextSections = reorderItems(getSections(), currentIndex, currentIndex - 1);
+    await persistModelUpdate({
+      ...state.model,
+      sections: nextSections,
+      metrics: applySectionTitlesToMetrics(getMetrics(), nextSections),
+    }, `Moved ${currentSection.title} up.`);
+    setSectionEditorStatus(`Moved ${currentSection.title} up.`, 'success');
+    renderWeights();
+    selectSectionByKey(currentSection.key);
+  });
+
+  els.moveSectionDownBtn?.addEventListener('click', async () => {
+    const currentSection = selectedSectionDefinition();
+    if (!currentSection) return;
+    const currentIndex = getSections().findIndex((section) => section.key === currentSection.key);
+    if (currentIndex < 0 || currentIndex >= getSections().length - 1) return;
+    const nextSections = reorderItems(getSections(), currentIndex, currentIndex + 1);
+    await persistModelUpdate({
+      ...state.model,
+      sections: nextSections,
+      metrics: applySectionTitlesToMetrics(getMetrics(), nextSections),
+    }, `Moved ${currentSection.title} down.`);
+    setSectionEditorStatus(`Moved ${currentSection.title} down.`, 'success');
+    renderWeights();
+    selectSectionByKey(currentSection.key);
+  });
+
+  els.deleteSectionBtn?.addEventListener('click', async () => {
+    const currentSection = selectedSectionDefinition();
+    if (!currentSection || getSections().length <= 1) return;
+    const fallbackSection = getSections().find((section) => section.key !== currentSection.key) || null;
+    if (!fallbackSection) return;
+    const nextSections = getSections().filter((section) => section.key !== currentSection.key);
+    const nextMetrics = applySectionTitlesToMetrics(getMetrics().map((metric) => (
+      metric.sectionKey === currentSection.key
+        ? { ...metric, sectionKey: fallbackSection.key, sectionLabel: fallbackSection.title }
+        : metric
+    )), nextSections);
+    await persistModelUpdate({
+      ...state.model,
+      sections: nextSections,
+      metrics: nextMetrics,
+    }, `Deleted ${currentSection.title}. Metrics moved to ${fallbackSection.title}.`);
+    setSectionEditorStatus(`Deleted ${currentSection.title}. Metrics moved to ${fallbackSection.title}.`, 'success');
+    renderWeights();
+    selectSectionByKey(fallbackSection.key);
   });
 
   els.guideMetric.addEventListener('change', renderGuide);
