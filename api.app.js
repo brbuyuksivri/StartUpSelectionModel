@@ -177,8 +177,9 @@ async function handleApiRequest(req, res, options = {}) {
         ok: true,
         service: 'vc-api',
         database: HAS_DATABASE_URL,
-        ai: hasOpenAiConfig(),
-        aiModel: aiEvaluator.isConfigured() ? OPENAI_MODEL : null,
+        ai: aiEvaluator.isConfigured(),
+        aiProvider: hasOpenAiConfig() ? 'openai' : 'fallback',
+        aiModel: hasOpenAiConfig() ? OPENAI_MODEL : 'heuristic-rubric-v1',
       });
       return;
     }
@@ -329,6 +330,15 @@ async function handleApiRequest(req, res, options = {}) {
     if (req.method === 'POST' && pathname === '/api/evaluation-jobs') {
       const payload = await readBody(req);
       json(res, 200, await evaluationJobsService.queue(payload?.startupId, {
+        requestedBy: payload?.requestedBy,
+        payload: payload?.payload,
+      }));
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/evaluation-jobs/run-now') {
+      const payload = await readBody(req);
+      json(res, 200, await evaluationJobsService.runNow(payload?.startupId, {
         requestedBy: payload?.requestedBy,
         payload: payload?.payload,
       }));

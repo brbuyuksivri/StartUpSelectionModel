@@ -6,19 +6,21 @@ function createAppServer() {
   return http.createServer((req, res) => handleApiRequest(req, res, { allowStatic: true }));
 }
 
-async function startServer() {
+async function startServer(options = {}) {
   const server = createAppServer();
+  const host = options.host || HOST;
+  const port = Number(options.port || PORT);
   return new Promise((resolve, reject) => {
     const onError = (error) => {
       if (error?.code === 'EADDRINUSE') {
-        error.message = `Port ${PORT} is already in use on ${HOST}. Stop the existing process or start with a different PORT.`;
+        error.message = `Port ${port} is already in use on ${host}. Stop the existing process or start with a different PORT.`;
       }
       reject(error);
     };
     server.once('error', onError);
-    server.listen(PORT, HOST, () => {
+    server.listen(port, host, () => {
       server.removeListener('error', onError);
-      console.log(`VC Scouting server running at http://${HOST}:${PORT}`);
+      console.log(`VC Scouting server running at http://${host}:${port}`);
       resolve(server);
     });
   });

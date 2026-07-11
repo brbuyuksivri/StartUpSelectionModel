@@ -15,6 +15,42 @@ function createEvaluationJobsService(deps) {
     };
   }
 
+  async function evaluateStartupDirect(startup, metrics, source, jobId = null, meta = {}) {
+    const aiResult = await deps.aiEvaluator.evaluateStartup({
+      startup,
+      metrics,
+    });
+
+    const nextAiScores = { ...(startup.aiScores || {}) };
+    const nextAiRationales = { ...(startup.aiRationales || {}) };
+    aiResult.metricScores.forEach((metricScore) => {
+      nextAiScores[metricScore.column] = metricScore.score;
+      nextAiRationales[metricScore.column] = metricScore.rationale;
+    });
+
+    const enrichedStartup = {
+      ...startup,
+      aiScores: nextAiScores,
+      aiRationales: nextAiRationales,
+    };
+
+    const evaluation = buildEvaluation(enrichedStartup, metrics, source, jobId, {
+      provider: aiResult.provider,
+      model: aiResult.model,
+      overallSummary: aiResult.overallSummary,
+      confidence: aiResult.confidence,
+      keyStrengths: aiResult.keyStrengths,
+      keyRisks: aiResult.keyRisks,
+      metricScores: aiResult.metricScores,
+      ...meta,
+    });
+
+    enrichedStartup.lastAiEvaluationId = evaluation.id;
+    await deps.saveCandidate(enrichedStartup);
+    await deps.saveEvaluation(evaluation);
+    return { evaluation, startup: enrichedStartup, aiResult };
+  }
+
   return {
     async list() {
       return deps.listEvaluationJobs();
@@ -46,38 +82,10 @@ function createEvaluationJobsService(deps) {
         const startup = snapshot.candidates.find((candidate) => candidate.id === job.startupId);
         if (!startup) throw new Error('Startup not found');
         const metrics = snapshot.model.metrics || [];
-
-        const aiResult = await deps.aiEvaluator.evaluateStartup({
-          startup,
-          metrics,
+        const { evaluation, startup: enrichedStartup, aiResult } = await evaluateStartupDirect(startup, metrics, 'openai-queue', job.id, {
+          trigger: job.payload?.trigger || 'queued-job',
+          requestedBy: job.requestedBy || 'system',
         });
-
-        const nextAiScores = { ...(startup.aiScores || {}) };
-        const nextAiRationales = { ...(startup.aiRationales || {}) };
-        aiResult.metricScores.forEach((metricScore) => {
-          nextAiScores[metricScore.column] = metricScore.score;
-          nextAiRationales[metricScore.column] = metricScore.rationale;
-        });
-
-        const enrichedStartup = {
-          ...startup,
-          aiScores: nextAiScores,
-          aiRationales: nextAiRationales,
-        };
-
-        const evaluation = buildEvaluation(enrichedStartup, metrics, 'openai-queue', job.id, {
-          provider: aiResult.provider,
-          model: aiResult.model,
-          overallSummary: aiResult.overallSummary,
-          confidence: aiResult.confidence,
-          keyStrengths: aiResult.keyStrengths,
-          keyRisks: aiResult.keyRisks,
-          metricScores: aiResult.metricScores,
-        });
-
-        enrichedStartup.lastAiEvaluationId = evaluation.id;
-        await deps.saveCandidate(enrichedStartup);
-        await deps.saveEvaluation(evaluation);
         await deps.completeEvaluationJob(job.id, {
           evaluationId: evaluation.id,
           startupId: enrichedStartup.id,
@@ -90,6 +98,18 @@ function createEvaluationJobsService(deps) {
         await deps.failEvaluationJob(job.id, error.message);
         throw error;
       }
+    },
+
+    async runNow(startupId, options = {}) {
+      if (!startupId) throw new Error('startupId is required');
+      const snapshot = await deps.readSnapshot();
+      const startup = snapshot.candidates.find((candidate) => candidate.id === startupId);
+      if (!startup) throw new Error('Startup not found');
+      const metrics = snapshot.model.metrics || [];
+      return evaluateStartupDirect(startup, metrics, 'openai-direct', null, {
+        trigger: options.payload?.trigger || 'direct-run',
+        requestedBy: options.requestedBy || 'frontend-direct',
+      });
     },
   };
 }

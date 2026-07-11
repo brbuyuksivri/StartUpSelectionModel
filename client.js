@@ -1,17 +1,20 @@
-const DATA_URL = '/api/bootstrap';
+const API_ORIGIN = globalThis.location?.protocol === 'file:' ? 'http://127.0.0.1:8000' : '';
+const DATA_URL = `${API_ORIGIN}/api/bootstrap`;
+const HEALTH_URL = `${API_ORIGIN}/api/health`;
 const FALLBACK_DATA_URL = './data/vc_scouting.json';
-const EXPORT_URL = '/api/export';
-const IMPORT_URL = '/api/import';
-const RESET_URL = '/api/reset';
-const SNAPSHOT_URL = '/api/snapshot';
-const STARTUPS_URL = '/api/startups';
-const DRAFTS_URL = '/api/drafts';
-const MODEL_URL = '/api/model';
-const ANALYTICS_PORTFOLIO_URL = '/api/analytics/portfolio';
-const EVALUATION_JOBS_URL = '/api/evaluation-jobs';
-const EVALUATIONS_URL = '/api/evaluations';
-const WEIGHTS_PREVIEW_URL = '/api/weights/preview';
-const WEIGHTS_APPLY_URL = '/api/weights/apply';
+const EXPORT_URL = `${API_ORIGIN}/api/export`;
+const IMPORT_URL = `${API_ORIGIN}/api/import`;
+const RESET_URL = `${API_ORIGIN}/api/reset`;
+const SNAPSHOT_URL = `${API_ORIGIN}/api/snapshot`;
+const STARTUPS_URL = `${API_ORIGIN}/api/startups`;
+const DRAFTS_URL = `${API_ORIGIN}/api/drafts`;
+const MODEL_URL = `${API_ORIGIN}/api/model`;
+const ANALYTICS_PORTFOLIO_URL = `${API_ORIGIN}/api/analytics/portfolio`;
+const EVALUATION_JOBS_URL = `${API_ORIGIN}/api/evaluation-jobs`;
+const EVALUATION_JOBS_RUN_NOW_URL = `${API_ORIGIN}/api/evaluation-jobs/run-now`;
+const EVALUATIONS_URL = `${API_ORIGIN}/api/evaluations`;
+const WEIGHTS_PREVIEW_URL = `${API_ORIGIN}/api/weights/preview`;
+const WEIGHTS_APPLY_URL = `${API_ORIGIN}/api/weights/apply`;
 const STORAGE_KEY = 'vc-scouting-model-ui-v4-empty-startups';
 const NEW_DRAFT_DEFAULTS = Object.freeze({
   draftId: '',
@@ -76,9 +79,11 @@ const els = {
   detailStatus: document.getElementById('detailStatus'),
   detailTabPanel: document.getElementById('detailTabPanel'),
   aiStartupSelect: document.getElementById('aiStartupSelect'),
+  aiRunNowBtn: document.getElementById('aiRunNowBtn'),
   aiQueueBtn: document.getElementById('aiQueueBtn'),
   aiProcessNextBtn: document.getElementById('aiProcessNextBtn'),
   aiRefreshBtn: document.getElementById('aiRefreshBtn'),
+  aiHealthSummary: document.getElementById('aiHealthSummary'),
   aiStatus: document.getElementById('aiStatus'),
   aiQueueSummary: document.getElementById('aiQueueSummary'),
   aiLatestEvaluation: document.getElementById('aiLatestEvaluation'),
@@ -208,6 +213,7 @@ const state = {
   aiSelectedStartupId: null,
   aiBusy: false,
   aiStatusText: '',
+  aiHealth: null,
   newDraftMeta: { ...NEW_DRAFT_DEFAULTS },
   newDraftPersistTimer: null,
   newStartupDrafts: [],
@@ -890,8 +896,32 @@ function save() {
 
 async function apiJson(url, options = {}) {
   const res = await fetch(url, options);
-  if (!res.ok) throw new Error(`${options.method || 'GET'} ${url} failed: ${res.status}`);
+  if (!res.ok) {
+    let message = `${options.method || 'GET'} ${url} failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.error;
+      if (Array.isArray(body?.details) && body.details.length) {
+        message = `${message} ${body.details.join(' ')}`.trim();
+      }
+    } catch {}
+    throw new Error(message);
+  }
   return res.json();
+}
+
+async function refreshAiHealth() {
+  if (!state.serverMode) {
+    state.aiHealth = null;
+    return null;
+  }
+  try {
+    state.aiHealth = await apiJson(HEALTH_URL);
+  } catch (error) {
+    console.error(error);
+    state.aiHealth = null;
+  }
+  return state.aiHealth;
 }
 
 async function refreshAnalytics(options = {}) {
@@ -927,20 +957,24 @@ async function refreshEvaluationWorkflow(options = {}) {
   if (!state.serverMode) {
     state.evaluationJobs = [];
     state.evaluations = [];
+    state.aiHealth = null;
     if (render) renderAiWorkflow();
     return;
   }
   try {
-    const [jobs, evaluations] = await Promise.all([
+    const [jobs, evaluations, health] = await Promise.all([
       apiJson(EVALUATION_JOBS_URL),
       apiJson(EVALUATIONS_URL),
+      refreshAiHealth(),
     ]);
     state.evaluationJobs = Array.isArray(jobs) ? jobs : [];
     state.evaluations = Array.isArray(evaluations) ? evaluations : [];
+    state.aiHealth = health;
   } catch (error) {
     console.error(error);
     state.evaluationJobs = [];
     state.evaluations = [];
+    state.aiHealth = null;
   }
   if (render) renderAiWorkflow();
 }
@@ -1729,23 +1763,45 @@ function renderAiWorkflow() {
   }
 
   const selectedCandidate = getCandidateById(state.aiSelectedStartupId);
+  const notes = selectedCandidate ? noteCoverageSummary(selectedCandidate) : { filled: 0, total: 0 };
+  const notesReady = selectedCandidate ? notes.filled > 0 : false;
   const queued = state.evaluationJobs.filter((job) => job.status === 'queued').length;
   const processing = state.evaluationJobs.filter((job) => job.status === 'processing').length;
   const completed = state.evaluationJobs.filter((job) => job.status === 'completed').length;
   const failed = state.evaluationJobs.filter((job) => job.status === 'failed').length;
 
-  els.aiQueueBtn.disabled = !state.serverMode || !selectedCandidate || state.aiBusy;
-  els.aiProcessNextBtn.disabled = !state.serverMode || state.aiBusy;
+  const aiReady = Boolean(state.aiHealth?.ai);
+  els.aiRunNowBtn.disabled = !state.serverMode || !aiReady || !selectedCandidate || !notesReady || state.aiBusy;
+  els.aiQueueBtn.disabled = !state.serverMode || !aiReady || !selectedCandidate || state.aiBusy;
+  els.aiProcessNextBtn.disabled = !state.serverMode || !aiReady || state.aiBusy;
   els.aiRefreshBtn.disabled = state.aiBusy;
 
   const defaultStatus = !state.serverMode
-    ? 'AI workflow is available only when the API server is active.'
-    : state.aiBusy
-      ? 'AI workflow is processing.'
-      : selectedCandidate
-        ? `Ready to evaluate ${selectedCandidate.name}. Queue depth: ${queued}.`
-        : 'No startups are available for evaluation.';
+    ? 'AI review requires the local API server. Open the app through the server or keep file mode open while the API is running at http://127.0.0.1:8000.'
+    : !aiReady
+      ? 'AI review is not available on the server.'
+      : state.aiBusy
+        ? 'AI review is running.'
+        : !selectedCandidate
+          ? 'No startups are available for evaluation.'
+          : !notesReady
+            ? `Add analyst notes first. ${selectedCandidate.name} currently has notes for ${notes.filled}/${notes.total} metrics.`
+            : `Ready to evaluate ${selectedCandidate.name}. Notes coverage: ${notes.filled}/${notes.total}. ${state.aiHealth?.aiProvider === 'fallback' ? 'Fallback rubric AI will be used until OpenAI is available.' : 'OpenAI review is available.'}`;
   els.aiStatus.textContent = state.aiStatusText || defaultStatus;
+
+  if (els.aiHealthSummary) {
+    const healthItems = [
+      ['API', state.serverMode ? 'Connected' : 'Offline'],
+      ['Database', state.aiHealth?.database ? 'Connected' : (state.serverMode ? 'Unavailable' : '—')],
+      ['AI', aiReady ? 'Available' : (state.serverMode ? 'Unavailable' : '—')],
+      ['Provider', state.aiHealth?.aiProvider || '—'],
+      ['Model', state.aiHealth?.aiModel || '—'],
+      ['Notes Ready', selectedCandidate ? `${notes.filled}/${notes.total}` : '—'],
+    ];
+    els.aiHealthSummary.innerHTML = healthItems
+      .map(([label, value]) => `<div class="kpi"><div class="muted">${escapeHtml(label)}</div><strong>${escapeHtml(String(value))}</strong></div>`)
+      .join('');
+  }
 
   els.aiQueueSummary.innerHTML = [
     ['Queued', queued],
@@ -1765,6 +1821,7 @@ function renderAiWorkflow() {
       ['Source', latestEvaluation.summary?.source || 'system'],
       ['Provider', analysis.provider || '—'],
       ['Model', analysis.model || '—'],
+      ['Mode', analysis.provider === 'fallback' ? 'Rubric fallback' : 'LLM review'],
       ['Generated', latestEvaluation.summary?.generatedAt ? new Date(latestEvaluation.summary.generatedAt).toLocaleString() : '—'],
       ['Total', fmt(computed.total)],
       ['Non-Financial', fmt(computed.nonFinancial)],
@@ -1832,7 +1889,7 @@ function renderAiWorkflow() {
             <div class="slot-readonly">${escapeHtml(fmt(ai))}</div>
           </label>
         </div>
-        ${rationale ? `<p class="chart-insight">${escapeHtml(rationale)}</p>` : ''}
+        ${rationale ? `<p class="chart-insight">${escapeHtml(rationale)}</p>` : '<p class="chart-insight">No AI rationale yet.</p>'}
       </div>
     `;
   }).join('');
@@ -3447,7 +3504,8 @@ function renderStartupDetailPage() {
   });
   const candidate = getDetailCandidate();
   els.detailCompareBtn.disabled = !candidate || state.candidates.length < 2;
-  els.detailQueueBtn.disabled = !candidate || !state.serverMode;
+  const detailNotes = candidate ? noteCoverageSummary(candidate) : { filled: 0 };
+  els.detailQueueBtn.disabled = !candidate || !state.serverMode || detailNotes.filled === 0;
   renderStartupRecordHero(candidate);
   renderStartupRecordTabContent(candidate);
 }
@@ -4007,6 +4065,38 @@ function attachEvents() {
     renderAiWorkflow();
   });
 
+  els.aiRunNowBtn?.addEventListener('click', async () => {
+    if (!state.serverMode || !state.aiSelectedStartupId) return;
+    state.aiBusy = true;
+    renderAiWorkflow();
+    try {
+      const result = await apiJson(EVALUATION_JOBS_RUN_NOW_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startupId: state.aiSelectedStartupId,
+          requestedBy: 'frontend-direct',
+          payload: { trigger: 'run-now-button' },
+        }),
+      });
+      if (result?.startup?.id) {
+        const current = getCandidateById(result.startup.id);
+        if (current) Object.assign(current, result.startup);
+        recomputeAll();
+      }
+      await refreshEvaluationWorkflow();
+      await refreshAnalytics({ render: false });
+      state.aiSelectedStartupId = result?.evaluation?.startupId || state.aiSelectedStartupId;
+      state.aiStatusText = `AI review completed for ${getCandidateById(state.aiSelectedStartupId)?.name || 'selected startup'}.`;
+    } catch (error) {
+      console.error(error);
+      state.aiStatusText = error.message;
+    } finally {
+      state.aiBusy = false;
+      renderAll();
+    }
+  });
+
   els.aiQueueBtn?.addEventListener('click', async () => {
     if (!state.serverMode || !state.aiSelectedStartupId) return;
     state.aiBusy = true;
@@ -4124,18 +4214,25 @@ function attachEvents() {
     const candidate = getDetailCandidate();
     if (!candidate || !state.serverMode) return;
     try {
-      await apiJson(EVALUATION_JOBS_URL, {
+      const result = await apiJson(EVALUATION_JOBS_RUN_NOW_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           startupId: candidate.id,
           requestedBy: 'startup-detail',
-          payload: { trigger: 'startup-record' },
+          payload: { trigger: 'startup-record-direct' },
         }),
       });
+      if (result?.startup?.id) {
+        const current = getCandidateById(result.startup.id);
+        if (current) Object.assign(current, result.startup);
+        recomputeAll();
+      }
       state.aiSelectedStartupId = candidate.id;
-      setDetailStatus(`Evaluation job queued for ${candidate.name}.`, 'success');
+      state.aiStatusText = `AI review completed for ${candidate.name}.`;
+      setDetailStatus(`AI review completed for ${candidate.name}.`, 'success');
       await refreshEvaluationWorkflow({ render: false });
+      await refreshAnalytics({ render: false });
       renderStartupDetailPage();
       renderAiWorkflow();
     } catch (error) {

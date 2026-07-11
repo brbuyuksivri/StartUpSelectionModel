@@ -107,9 +107,11 @@
               <label>Startup
                 <select id="aiStartupSelect"></select>
               </label>
+              <button id="aiRunNowBtn" type="button">Run AI Review Now</button>
               <button id="aiQueueBtn" type="button">Queue Review</button>
               <button id="aiProcessNextBtn" class="ghost" type="button">Process Next Job</button>
             </div>
+            <div id="aiHealthSummary" class="summary"></div>
             <p id="aiStatus" class="chart-insight">AI workflow is loading.</p>
             <div id="aiQueueSummary" class="summary"></div>
             <div class="grid-2 ai-workflow-grid">
@@ -180,7 +182,7 @@
               </label>
               <div class="row brief-actions">
                 <button id="detailCompareBtn" class="ghost" type="button">Compare to Top</button>
-                <button id="detailQueueBtn" class="ghost" type="button">Queue AI Review</button>
+                <button id="detailQueueBtn" class="ghost" type="button">Run AI Review</button>
               </div>
             </div>
             <div id="detailHero" class="selected-brief-empty">
