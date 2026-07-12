@@ -28,24 +28,27 @@ const NEW_STARTUP_DRAFT_PREFIX = 'new-startup:';
 const scoringCore = globalThis.VCScoringCore;
 const metricModel = globalThis.VCMetricModel;
 const SCORE_OPTIONS = ['', 1, 2, 3, 4, 5];
-const SUPPORTED_PANES = new Set(['table', 'detail', 'analysis', 'compare']);
-const PIPELINE_COLUMN_OPTIONS = Object.freeze([
-  { key: 'owner', label: 'Owner' },
-  { key: 'tags', label: 'Tags' },
-  { key: 'stage', label: 'Stage' },
-  { key: 'nonFin', label: 'Non-Fin' },
-  { key: 'fin', label: 'Fin' },
-  { key: 'total', label: 'Total' },
-  { key: 'quadrant', label: 'Quadrant' },
-  { key: 'lastActivity', label: 'Last Activity' },
+const SUPPORTED_PANES = new Set(['table', 'new', 'weights', 'detail', 'analysis', 'compare']);
+const PIPELINE_STAGES = Object.freeze(metricModel.PIPELINE_STAGES || [
+  { key: 'on-deck', label: 'On Deck' },
+  { key: 'first-look', label: 'First Look' },
+  { key: 'deep-dive', label: 'Deep Dive' },
+  { key: 'ic-ready', label: 'IC Ready' },
+  { key: 'pass', label: 'Pass' },
 ]);
+const DEFAULT_PIPELINE_FILTERS = Object.freeze({
+  owner: 'all',
+  tags: '',
+  confidence: 'all',
+  evidence: 'all',
+  staleDays: 'all',
+  summary: 'all',
+});
 
 const els = {
   panes: [...document.querySelectorAll('.pane')],
   navBtns: [...document.querySelectorAll('.nav-btn')],
   resetBtn: document.getElementById('resetBtn'),
-  exportBtn: document.getElementById('exportBtn'),
-  importInput: document.getElementById('importInput'),
 
   toggleScatterControls: document.getElementById('toggleScatterControls'),
   scatterControls: document.getElementById('scatterControls'),
@@ -105,15 +108,13 @@ const els = {
   newDraftBtn: document.getElementById('newDraftBtn'),
   deleteDraftBtn: document.getElementById('deleteDraftBtn'),
   newName: document.getElementById('newName'),
-  newTemplate: document.getElementById('newTemplate'),
-  newClone: document.getElementById('newClone'),
   newNotesMode: document.getElementById('newNotesMode'),
-  prefillBtn: document.getElementById('prefillBtn'),
   saveDraftBtn: document.getElementById('saveDraftBtn'),
   clearBtn: document.getElementById('clearBtn'),
   createBtn: document.getElementById('createBtn'),
   newDraftStatus: document.getElementById('newDraftStatus'),
   newFeedback: document.getElementById('newFeedback'),
+  newModeRequirement: document.getElementById('newModeRequirement'),
   newMetrics: document.getElementById('newMetrics'),
   guideMetric: document.getElementById('guideMetric'),
   guideText: document.getElementById('guideText'),
@@ -122,19 +123,27 @@ const els = {
   sortSelect: document.getElementById('sortSelect'),
   quadrantSelect: document.getElementById('quadrantSelect'),
   savedViewSelect: document.getElementById('savedViewSelect'),
+  pipelineOpenNewBtn: document.getElementById('pipelineOpenNewBtn'),
+  pipelineAdvancedFilters: document.getElementById('pipelineAdvancedFilters'),
+  pipelineOwnerFilter: document.getElementById('pipelineOwnerFilter'),
+  pipelineTagFilter: document.getElementById('pipelineTagFilter'),
+  pipelineConfidenceFilter: document.getElementById('pipelineConfidenceFilter'),
+  pipelineEvidenceFilter: document.getElementById('pipelineEvidenceFilter'),
+  pipelineStaleFilter: document.getElementById('pipelineStaleFilter'),
   pipelineFilterSelect: document.getElementById('pipelineFilterSelect'),
   pipelineFilterName: document.getElementById('pipelineFilterName'),
   savePipelineFilterBtn: document.getElementById('savePipelineFilterBtn'),
   deletePipelineFilterBtn: document.getElementById('deletePipelineFilterBtn'),
-  pipelineColumnList: document.getElementById('pipelineColumnList'),
-  selectVisibleToggle: document.getElementById('selectVisibleToggle'),
+  pipelineSummaryStrip: document.getElementById('pipelineSummaryStrip'),
+  pipelineBoard: document.getElementById('pipelineBoard'),
+  pipelineDrawer: document.getElementById('pipelineDrawer'),
   selectionStatus: document.getElementById('selectionStatus'),
   bulkTagInput: document.getElementById('bulkTagInput'),
   bulkStageSelect: document.getElementById('bulkStageSelect'),
   bulkTagBtn: document.getElementById('bulkTagBtn'),
   bulkStageBtn: document.getElementById('bulkStageBtn'),
+  clearPipelineSelectionBtn: document.getElementById('clearPipelineSelectionBtn'),
   bulkDeleteBtn: document.getElementById('bulkDeleteBtn'),
-  table: document.getElementById('table'),
 
   weightsContainer: document.getElementById('weightsContainer'),
   presetSelect: document.getElementById('presetSelect'),
@@ -184,9 +193,12 @@ const state = {
   sort: 'total-desc',
   quadrant: 'all',
   savedView: 'all',
-  pipelineColumns: ['owner', 'tags', 'stage', 'nonFin', 'fin', 'total', 'quadrant', 'lastActivity'],
   pipelineSavedFilters: [],
   selectedPipelineFilterId: '',
+  pipelineFilters: { ...DEFAULT_PIPELINE_FILTERS },
+  pipelineAdvancedOpen: true,
+  pipelineDrawerId: null,
+  pipelineDragId: null,
   compareA: null,
   compareB: null,
   compareMode: 'raw',
@@ -218,6 +230,9 @@ const state = {
   newDraftPersistTimer: null,
   newStartupDrafts: [],
   briefPersistTimers: {},
+  newIntakeSectionKey: '',
+  newIntakeOpenSections: {},
+  pipelinePreviewStatus: {},
 };
 
 function uid() {
@@ -225,19 +240,19 @@ function uid() {
 }
 
 function normalizePane(pane) {
-  if (pane === 'new' || pane === 'weights') return 'table';
   return SUPPORTED_PANES.has(pane) ? pane : 'table';
 }
 
-function defaultPipelineColumns() {
-  return PIPELINE_COLUMN_OPTIONS.map((option) => option.key);
-}
-
-function normalizePipelineColumns(columns) {
-  const allowed = new Set(defaultPipelineColumns());
-  const incoming = Array.isArray(columns) ? columns.map((item) => String(item || '').trim()).filter(Boolean) : [];
-  const filtered = incoming.filter((item, index) => allowed.has(item) && incoming.indexOf(item) === index);
-  return filtered.length ? filtered : defaultPipelineColumns();
+function normalizePipelineFilters(filters) {
+  const input = filters && typeof filters === 'object' ? filters : {};
+  return {
+    owner: String(input.owner || DEFAULT_PIPELINE_FILTERS.owner),
+    tags: String(input.tags || DEFAULT_PIPELINE_FILTERS.tags),
+    confidence: String(input.confidence || DEFAULT_PIPELINE_FILTERS.confidence),
+    evidence: String(input.evidence || DEFAULT_PIPELINE_FILTERS.evidence),
+    staleDays: String(input.staleDays || DEFAULT_PIPELINE_FILTERS.staleDays),
+    summary: String(input.summary || DEFAULT_PIPELINE_FILTERS.summary),
+  };
 }
 
 function normalizePipelineSavedFilters(filters) {
@@ -253,7 +268,7 @@ function normalizePipelineSavedFilters(filters) {
         sort: String(filter?.sort || 'total-desc'),
         quadrant: String(filter?.quadrant || 'all'),
         savedView: String(filter?.savedView || 'all'),
-        columns: normalizePipelineColumns(filter?.columns),
+        filters: normalizePipelineFilters(filter?.filters),
       };
     })
     .filter(Boolean);
@@ -329,9 +344,73 @@ function visibleCandidates() {
   let rows = [...state.candidates];
   const q = state.quadrant;
   const s = state.search.trim().toLowerCase();
-  if (s) rows = rows.filter((c) => c.name.toLowerCase().includes(s));
+  const owner = state.pipelineFilters.owner;
+  const tagQuery = state.pipelineFilters.tags.trim().toLowerCase();
+  const confidenceBand = state.pipelineFilters.confidence;
+  const evidenceBand = state.pipelineFilters.evidence;
+  const staleDays = Number(state.pipelineFilters.staleDays);
+  const summary = state.pipelineFilters.summary;
+  if (s) {
+    rows = rows.filter((c) => {
+      const detail = startupDetail(c);
+      const haystack = [
+        c.name,
+        detail.overview.owner,
+        detail.overview.summary,
+        detail.overview.thesis,
+        detail.overview.nextStep,
+        candidateTags(c).join(' '),
+      ].join(' ').toLowerCase();
+      return haystack.includes(s);
+    });
+  }
   if (q !== 'all') rows = rows.filter((c) => quadrantOf(c) === q);
+  if (owner !== 'all') rows = rows.filter((c) => candidateOwner(c) === owner);
+  if (tagQuery) {
+    const terms = tagQuery.split(',').map((item) => item.trim()).filter(Boolean);
+    rows = rows.filter((c) => {
+      const tags = candidateTags(c).join(' ').toLowerCase();
+      return terms.every((term) => tags.includes(term));
+    });
+  }
+  if (confidenceBand !== 'all') {
+    rows = rows.filter((c) => {
+      const confidence = pointQuality(c).confidence;
+      if (confidenceBand === 'high') return confidence >= 0.8;
+      if (confidenceBand === 'medium') return confidence >= 0.55 && confidence < 0.8;
+      return confidence < 0.55;
+    });
+  }
+  if (evidenceBand !== 'all') {
+    rows = rows.filter((c) => {
+      const coverage = pointQuality(c).coverage;
+      if (evidenceBand === 'strong') return coverage >= 0.8;
+      if (evidenceBand === 'moderate') return coverage >= 0.55 && coverage < 0.8;
+      return coverage < 0.55;
+    });
+  }
+  if (Number.isFinite(staleDays) && staleDays > 0) {
+    const thresholdMs = staleDays * 24 * 60 * 60 * 1000;
+    rows = rows.filter((c) => {
+      const last = latestActivityAt(c);
+      if (!last) return true;
+      return Date.now() - new Date(last).getTime() >= thresholdMs;
+    });
+  }
   rows = rows.filter((c) => passesSavedView(c));
+  if (summary !== 'all') {
+    rows = rows.filter((c) => {
+      if (summary === 'in-review') return ['first-look', 'deep-dive'].includes(candidateStage(c));
+      if (summary === 'ic-ready') return candidateStage(c) === 'ic-ready';
+      if (summary === 'pass') return candidateStage(c) === 'pass';
+      if (summary === 'stale') {
+        const last = latestActivityAt(c);
+        if (!last) return true;
+        return Date.now() - new Date(last).getTime() >= 14 * 24 * 60 * 60 * 1000;
+      }
+      return true;
+    });
+  }
   rows.sort((a, b) => {
     if (state.sort === 'name-asc') return a.name.localeCompare(b.name);
     if (state.sort === 'name-desc') return b.name.localeCompare(a.name);
@@ -676,12 +755,13 @@ function ensureScatterTooltip() {
   tip.style.pointerEvents = 'none';
   tip.style.zIndex = '5';
   tip.style.maxWidth = '320px';
-  tip.style.padding = '10px 12px';
-  tip.style.border = '1px solid #d8e0ec';
-  tip.style.borderRadius = '12px';
-  tip.style.background = 'rgba(255,255,255,0.96)';
-  tip.style.boxShadow = '0 10px 28px rgba(15, 23, 42, 0.14)';
-  tip.style.color = '#0f172a';
+  tip.style.padding = '12px 14px';
+  tip.style.border = '1px solid rgba(73, 92, 127, 0.9)';
+  tip.style.borderRadius = '14px';
+  tip.style.background = 'rgba(10,18,33,0.96)';
+  tip.style.boxShadow = '0 18px 34px rgba(0, 0, 0, 0.42)';
+  tip.style.backdropFilter = 'blur(10px)';
+  tip.style.color = '#edf4ff';
   tip.style.font = '13px "Helvetica Neue", Helvetica, Arial, sans-serif';
   host.appendChild(tip);
   state.scatterTooltipEl = tip;
@@ -777,9 +857,10 @@ function serializeUi() {
     sort: state.sort,
     quadrant: state.quadrant,
     savedView: state.savedView,
-    pipelineColumns: clone(state.pipelineColumns),
     pipelineSavedFilters: clone(state.pipelineSavedFilters),
     selectedPipelineFilterId: state.selectedPipelineFilterId,
+    pipelineFilters: clone(state.pipelineFilters),
+    pipelineAdvancedOpen: state.pipelineAdvancedOpen,
     compareA: state.compareA,
     compareB: state.compareB,
     compareMode: state.compareMode,
@@ -788,6 +869,8 @@ function serializeUi() {
     detailTab: state.detailTab,
     scatterFocusTopNear: state.scatterFocusTopNear,
     weightPreset: state.weightPreset,
+    newIntakeSectionKey: state.newIntakeSectionKey,
+    newIntakeOpenSections: clone(state.newIntakeOpenSections),
     aiSelectedStartupId: state.aiSelectedStartupId,
   };
 }
@@ -1051,9 +1134,11 @@ function hydrate(snapshot) {
   state.sort = ui.sort || 'total-desc';
   state.quadrant = ui.quadrant || 'all';
   state.savedView = ui.savedView || 'all';
-  state.pipelineColumns = normalizePipelineColumns(ui.pipelineColumns);
   state.pipelineSavedFilters = normalizePipelineSavedFilters(ui.pipelineSavedFilters);
   state.selectedPipelineFilterId = ui.selectedPipelineFilterId || '';
+  state.pipelineFilters = normalizePipelineFilters(ui.pipelineFilters);
+  state.pipelineAdvancedOpen = ui.pipelineAdvancedOpen !== false;
+  state.pipelineDrawerId = null;
   state.compareA = ui.compareA || state.candidates[0]?.id || null;
   state.compareB = ui.compareB || state.candidates.find((c) => c.id !== state.compareA)?.id || state.compareA;
   state.compareMode = ui.compareMode || 'raw';
@@ -1062,6 +1147,10 @@ function hydrate(snapshot) {
   state.detailTab = ui.detailTab || 'overview';
   state.scatterFocusTopNear = Boolean(ui.scatterFocusTopNear);
   state.weightPreset = ui.weightPreset || 'balanced';
+  state.newIntakeSectionKey = ui.newIntakeSectionKey || '';
+  state.newIntakeOpenSections = ui.newIntakeOpenSections && typeof ui.newIntakeOpenSections === 'object'
+    ? { ...ui.newIntakeOpenSections }
+    : {};
   state.aiSelectedStartupId = ui.aiSelectedStartupId || state.scatterSelectedId || state.compareA;
   state.selectedRows = [];
   state.weightPreviewData = null;
@@ -1079,6 +1168,9 @@ function hydrate(snapshot) {
   };
   state.newDraft = snapshot.newStartupDraft?.draft ? normalizeDraftData(clone(snapshot.newStartupDraft.draft)) : null;
   syncDraftLibraryWithCurrent();
+  if (!state.newIntakeSectionKey) {
+    state.newIntakeSectionKey = getNewStartupSections()[0]?.key || '';
+  }
 
   recomputeAll();
   setDraftWeightsFromModel();
@@ -1102,7 +1194,7 @@ function freshSnapshot() {
       computedFromExcel: clone(c.computedFromExcel || null),
       isNew: false,
       tags: [],
-      stage: 'sourcing',
+      stage: 'on-deck',
       lastAiEvaluationId: c.lastAiEvaluationId || null,
       detail: normalizeStartupDetail(),
     })),
@@ -1115,8 +1207,8 @@ function syncNewDraftMetaFromInputs() {
   state.newDraftMeta = {
     ...state.newDraftMeta,
     name: els.newName?.value || '',
-    template: els.newTemplate?.value || NEW_DRAFT_DEFAULTS.template,
-    clone: els.newClone?.value || '',
+    template: NEW_DRAFT_DEFAULTS.template,
+    clone: '',
     notesMode: els.newNotesMode?.value || NEW_DRAFT_DEFAULTS.notesMode,
   };
 }
@@ -1285,8 +1377,34 @@ function renderScatter() {
   const canvas = els.scatterCanvas;
   const { ctx, width: W, height: H } = prepareCanvas(canvas);
   const baseRows = visibleCandidates();
-  const pad = { l: 64, r: 24, t: 24, b: 64 };
+  const pad = { l: 78, r: 34, t: 34, b: 82 };
   const plot = { x: pad.l, y: pad.t, w: W - pad.l - pad.r, h: H - pad.t - pad.b };
+  const theme = {
+    canvas: '#09111f',
+    plot: '#0f1a2d',
+    plotEdge: 'rgba(74, 125, 255, 0.16)',
+    grid: 'rgba(143, 161, 194, 0.15)',
+    axis: '#9db0d0',
+    ticks: '#7186ab',
+    thresholdNF: '#7aa2ff',
+    thresholdF: '#41e3d1',
+    zoneWatch: 'rgba(74, 125, 255, 0.08)',
+    zoneInvest: 'rgba(44, 214, 182, 0.08)',
+    zonePass: 'rgba(148, 163, 184, 0.08)',
+    labelBg: 'rgba(8, 15, 28, 0.84)',
+    labelStroke: 'rgba(50, 68, 102, 0.92)',
+    labelText: '#edf4ff',
+  };
+  const roundRect = (x, y, w, h, r) => {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  };
 
   const maxNF = Math.max(1, ...state.candidates.map((c) => c.computed.nonFinancial), Number(state.thresholds.nf || 0));
   const maxF = Math.max(1, ...state.candidates.map((c) => c.computed.financial), Number(state.thresholds.f || 0));
@@ -1304,10 +1422,30 @@ function renderScatter() {
     : baseRows;
   state.scatterFrame = { plot, xMax, yMax };
 
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = theme.canvas;
   ctx.fillRect(0, 0, W, H);
 
-  ctx.strokeStyle = 'rgba(15,23,42,0.12)';
+  roundRect(plot.x, plot.y, plot.w, plot.h, 18);
+  ctx.fillStyle = theme.plot;
+  ctx.fill();
+  ctx.strokeStyle = theme.plotEdge;
+  ctx.stroke();
+
+  const toX = (v) => plot.x + (v / xMax) * plot.w;
+  const toY = (v) => plot.y + plot.h - (v / yMax) * plot.h;
+  const thresholdX = toX(state.thresholds.nf);
+  const thresholdY = toY(state.thresholds.f);
+
+  ctx.fillStyle = theme.zoneWatch;
+  ctx.fillRect(plot.x, plot.y, Math.max(0, thresholdX - plot.x), Math.max(0, thresholdY - plot.y));
+  ctx.fillStyle = theme.zoneInvest;
+  ctx.fillRect(thresholdX, plot.y, Math.max(0, plot.x + plot.w - thresholdX), Math.max(0, thresholdY - plot.y));
+  ctx.fillStyle = 'rgba(44, 214, 182, 0.05)';
+  ctx.fillRect(thresholdX, thresholdY, Math.max(0, plot.x + plot.w - thresholdX), Math.max(0, plot.y + plot.h - thresholdY));
+  ctx.fillStyle = theme.zonePass;
+  ctx.fillRect(plot.x, thresholdY, Math.max(0, thresholdX - plot.x), Math.max(0, plot.y + plot.h - thresholdY));
+
+  ctx.strokeStyle = theme.grid;
   for (let i = 0; i <= 5; i++) {
     const x = plot.x + (plot.w * i / 5);
     const y = plot.y + (plot.h * i / 5);
@@ -1315,40 +1453,50 @@ function renderScatter() {
     ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.x + plot.w, y); ctx.stroke();
   }
 
-  ctx.fillStyle = '#5b6b86';
+  ctx.fillStyle = theme.axis;
   ctx.font = '12px "Helvetica Neue", Helvetica, Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Non-Financial Score', plot.x + plot.w / 2, H - 10);
+  ctx.fillText('Non-Financial Score', plot.x + plot.w / 2, H - 18);
   ctx.save();
-  ctx.translate(16, plot.y + plot.h / 2);
+  ctx.translate(24, plot.y + plot.h / 2);
   ctx.rotate(-Math.PI / 2);
   ctx.fillText('Financial Score', 0, 0);
   ctx.restore();
 
-  const toX = (v) => plot.x + (v / xMax) * plot.w;
-  const toY = (v) => plot.y + plot.h - (v / yMax) * plot.h;
+  ctx.fillStyle = theme.ticks;
+  ctx.font = '11px "Helvetica Neue", Helvetica, Arial, sans-serif';
+  for (let i = 0; i <= 5; i++) {
+    const xv = Math.round((xMax * i) / 5);
+    const yv = Math.round(yMax - (yMax * i) / 5);
+    ctx.textAlign = 'center';
+    ctx.fillText(String(xv), plot.x + (plot.w * i / 5), plot.y + plot.h + 24);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(yv), plot.x - 14, plot.y + (plot.h * i / 5) + 4);
+  }
 
   ctx.setLineDash([8, 6]);
-  ctx.strokeStyle = '#2f6bff';
-  ctx.beginPath(); ctx.moveTo(toX(state.thresholds.nf), plot.y); ctx.lineTo(toX(state.thresholds.nf), plot.y + plot.h); ctx.stroke();
-  ctx.strokeStyle = '#00a3a3';
-  ctx.beginPath(); ctx.moveTo(plot.x, toY(state.thresholds.f)); ctx.lineTo(plot.x + plot.w, toY(state.thresholds.f)); ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = theme.thresholdNF;
+  ctx.beginPath(); ctx.moveTo(thresholdX, plot.y); ctx.lineTo(thresholdX, plot.y + plot.h); ctx.stroke();
+  ctx.strokeStyle = theme.thresholdF;
+  ctx.beginPath(); ctx.moveTo(plot.x, thresholdY); ctx.lineTo(plot.x + plot.w, thresholdY); ctx.stroke();
   ctx.setLineDash([]);
+  ctx.lineWidth = 1;
 
   const zoneLabel = (text, x, y, tone) => {
     ctx.fillStyle = tone;
-    ctx.font = '700 12px "Helvetica Neue", Helvetica, Arial, sans-serif';
+    ctx.font = '700 13px "Helvetica Neue", Helvetica, Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(text, x, y);
   };
-  const cxLeft = (plot.x + toX(state.thresholds.nf)) / 2;
-  const cxRight = (toX(state.thresholds.nf) + plot.x + plot.w) / 2;
-  const cyTop = (plot.y + toY(state.thresholds.f)) / 2;
-  const cyBottom = (toY(state.thresholds.f) + plot.y + plot.h) / 2;
-  zoneLabel('WATCH', cxLeft, cyTop, 'rgba(47,107,255,0.55)');
-  zoneLabel('INVEST', cxRight, cyTop, 'rgba(0,163,163,0.62)');
-  zoneLabel('WATCH', cxRight, cyBottom, 'rgba(19,185,129,0.55)');
-  zoneLabel('PASS', cxLeft, cyBottom, 'rgba(148,163,184,0.62)');
+  const cxLeft = (plot.x + thresholdX) / 2;
+  const cxRight = (thresholdX + plot.x + plot.w) / 2;
+  const cyTop = (plot.y + thresholdY) / 2;
+  const cyBottom = (thresholdY + plot.y + plot.h) / 2;
+  zoneLabel('WATCH', cxLeft, cyTop, 'rgba(122, 162, 255, 0.86)');
+  zoneLabel('INVEST', cxRight, cyTop, 'rgba(96, 255, 228, 0.88)');
+  zoneLabel('WATCH', cxRight, cyBottom, 'rgba(76, 230, 167, 0.82)');
+  zoneLabel('PASS', cxLeft, cyBottom, 'rgba(196, 204, 220, 0.76)');
 
   const color = (q) => q === 'top-right' ? '#00a3a3' : q === 'top-left' ? '#2f6bff' : q === 'bottom-right' ? '#13b981' : '#94a3b8';
 
@@ -1370,12 +1518,18 @@ function renderScatter() {
   const drawCircle = (p) => {
     const conf = p.quality.confidence;
     const cov = p.quality.coverage;
-    const confColor = conf >= 0.75 ? '#0f766e' : conf >= 0.5 ? '#d97706' : '#b91c1c';
-    const baseR = 5.5 + cov * 2.6;
+    const confColor = conf >= 0.75 ? '#65f6cf' : conf >= 0.5 ? '#ffd166' : '#ff7b9c';
+    const baseR = 6 + cov * 3.2;
     if (p.id === state.scatterSelectedId) {
-      ctx.fillStyle = 'rgba(47,107,255,0.15)';
+      ctx.fillStyle = 'rgba(74,125,255,0.18)';
       ctx.beginPath();
-      ctx.arc(p.x, p.y, baseR + 5.2, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, baseR + 6.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (p.id === state.scatterHoverId || p.id === state.scatterSelectedId) {
+      ctx.fillStyle = 'rgba(30, 211, 255, 0.12)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, baseR + 10, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.fillStyle = color(p.quadrant);
@@ -1383,13 +1537,13 @@ function renderScatter() {
     ctx.arc(p.x, p.y, p.id === state.scatterHoverId ? baseR + 1.8 : baseR, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = confColor;
-    ctx.lineWidth = 1 + conf * 1.4;
+    ctx.lineWidth = 1.5 + conf * 1.8;
     ctx.beginPath();
     ctx.arc(p.x, p.y, baseR + 0.4, 0, Math.PI * 2);
     ctx.stroke();
     if (p.id === state.scatterHoverId || p.id === state.scatterSelectedId) {
-      ctx.strokeStyle = '#0f172a';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#f8fbff';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.id === state.scatterHoverId ? baseR + 2.8 : baseR + 2.2, 0, Math.PI * 2);
       ctx.stroke();
@@ -1403,7 +1557,7 @@ function renderScatter() {
     const text = p.candidate.name;
     ctx.font = '11px "Helvetica Neue", Helvetica, Arial, sans-serif';
     const tw = Math.ceil(ctx.measureText(text).width);
-    const th = 14;
+    const th = 16;
     const options = [
       { dx: 10, dy: -10, align: 'left' },
       { dx: 10, dy: 14, align: 'left' },
@@ -1428,10 +1582,25 @@ function renderScatter() {
       placed = { x: p.x + 10, y: p.y - 12, align: 'left', box: { x: p.x + 8, y: p.y - 24, w: tw + 4, h: th + 4 } };
     }
     boxes.push(placed.box);
+    roundRect(placed.box.x, placed.box.y, placed.box.w, placed.box.h, 8);
+    ctx.fillStyle = theme.labelBg;
+    ctx.fill();
+    ctx.strokeStyle = theme.labelStroke;
+    ctx.stroke();
     ctx.textAlign = placed.align;
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = theme.labelText;
     ctx.fillText(text, placed.x, placed.y + th - 4);
   };
+
+  if (!rows.length) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e3edff';
+    ctx.font = '700 18px "Helvetica Neue", Helvetica, Arial, sans-serif';
+    ctx.fillText('No startups to plot yet', plot.x + plot.w / 2, plot.y + plot.h / 2 - 10);
+    ctx.fillStyle = theme.axis;
+    ctx.font = '14px "Helvetica Neue", Helvetica, Arial, sans-serif';
+    ctx.fillText('Add startups in Pipeline to start portfolio mapping.', plot.x + plot.w / 2, plot.y + plot.h / 2 + 18);
+  }
 
   state.scatterPoints.forEach(drawCircle);
 
@@ -1464,12 +1633,36 @@ function drawBars(canvas, labels, values, color = '#2f6bff', options = {}) {
   const { ctx, width: W, height: H } = prepareCanvas(canvas);
   const pad = { l: 52, r: 18, t: 16, b: 84 };
   const plot = { x: pad.l, y: pad.t, w: W - pad.l - pad.r, h: H - pad.t - pad.b };
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  const theme = {
+    canvas: '#09111f',
+    plot: '#0f1a2d',
+    plotEdge: 'rgba(74, 125, 255, 0.16)',
+    grid: 'rgba(143, 161, 194, 0.15)',
+    label: '#dce7fb',
+    sublabel: '#8fa1c2',
+  };
+  const roundRect = (x, y, w, h, r) => {
+    const radius = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  };
+  ctx.fillStyle = theme.canvas;
+  ctx.fillRect(0, 0, W, H);
+  roundRect(plot.x, plot.y, plot.w, plot.h, 18);
+  ctx.fillStyle = theme.plot;
+  ctx.fill();
+  ctx.strokeStyle = theme.plotEdge;
+  ctx.stroke();
 
   const maxV = Math.max(1, ...values);
   const lane = plot.w / Math.max(1, labels.length);
   const barWidth = Math.max(14, Math.min(40, lane - 14));
-  ctx.strokeStyle = 'rgba(15,23,42,0.1)';
+  ctx.strokeStyle = theme.grid;
   for (let i = 0; i <= 4; i++) {
     const y = plot.y + plot.h * i / 4;
     ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.x + plot.w, y); ctx.stroke();
@@ -1528,13 +1721,15 @@ function drawBars(canvas, labels, values, color = '#2f6bff', options = {}) {
     const y = plot.y + plot.h - h;
     ctx.fillStyle = color;
     ctx.fillRect(x, y, barWidth, h);
+    ctx.strokeStyle = 'rgba(236, 244, 255, 0.2)';
+    ctx.strokeRect(x, y, barWidth, h);
 
     const nameLines = wrap(lb, Math.max(40, lane - 8), 2);
     ctx.save();
     ctx.beginPath();
     ctx.rect(cx - lane / 2 + 2, H - 44, lane - 4, 36);
     ctx.clip();
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = theme.label;
     nameLines.forEach((line, lineIndex) => {
       ctx.fillText(line, cx, H - 30 + lineIndex * 13);
     });
@@ -1585,7 +1780,7 @@ function renderDistribution() {
 function renderQuadrantPieChart() {
   if (!els.quadrantPieCanvas) return;
   const { ctx, width: W, height: H } = prepareCanvas(els.quadrantPieCanvas);
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#09111f';
   ctx.fillRect(0, 0, W, H);
 
   const analytics = currentAnalyticsData();
@@ -1616,10 +1811,10 @@ function renderQuadrantPieChart() {
   });
 
   ctx.beginPath();
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#0f1a2d';
   ctx.arc(cx, cy, inner, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = '#edf4ff';
   ctx.textAlign = 'center';
   ctx.font = '700 14px "Helvetica Neue", Helvetica, Arial, sans-serif';
   ctx.fillText('Quadrants', cx, cy - 6);
@@ -1634,7 +1829,7 @@ function renderQuadrantPieChart() {
     const pct = Math.round((val / total) * 100);
     ctx.fillStyle = colors[i];
     ctx.fillRect(lx, y - 10, 12, 12);
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = '#dce7fb';
     ctx.textAlign = 'left';
     ctx.font = '12px "Helvetica Neue", Helvetica, Arial, sans-serif';
     ctx.fillText(`${name}: ${val} (${pct}%)`, lx + 18, y);
@@ -1648,7 +1843,7 @@ function renderQuadrantPieChart() {
 function renderRankingContributionChart() {
   if (!els.rankingContributionCanvas) return;
   const { ctx, width: W, height: H } = prepareCanvas(els.rankingContributionCanvas);
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#09111f';
   ctx.fillRect(0, 0, W, H);
 
   const analytics = currentAnalyticsData();
@@ -1667,7 +1862,9 @@ function renderRankingContributionChart() {
   const barW = Math.max(12, Math.min(34, lane - 10));
   const maxTotal = Math.max(...rows.map((r) => r.total), 1);
 
-  ctx.strokeStyle = 'rgba(15,23,42,0.1)';
+  ctx.fillStyle = '#0f1a2d';
+  ctx.fillRect(plot.x, plot.y, plot.w, plot.h);
+  ctx.strokeStyle = 'rgba(143, 161, 194, 0.15)';
   for (let i = 0; i <= 4; i++) {
     const y = plot.y + plot.h * i / 4;
     ctx.beginPath();
@@ -1681,11 +1878,13 @@ function renderRankingContributionChart() {
     const h = (r.total / maxTotal) * plot.h;
     const x = cx - barW / 2;
     const y = plot.y + plot.h - h;
-    ctx.fillStyle = '#2f6bff';
+    ctx.fillStyle = '#4a7dff';
     ctx.fillRect(x, y, barW, h);
+    ctx.strokeStyle = 'rgba(236, 244, 255, 0.2)';
+    ctx.strokeRect(x, y, barW, h);
   });
 
-  ctx.strokeStyle = '#00a3a3';
+  ctx.strokeStyle = '#41e3d1';
   ctx.lineWidth = 2;
   ctx.beginPath();
   rows.forEach((_, i) => {
@@ -1709,9 +1908,9 @@ function renderRankingContributionChart() {
   rows.forEach((r, i) => {
     const cx = plot.x + lane * i + lane / 2;
     const label = fit(r.name, Math.max(28, lane - 6));
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = '#dce7fb';
     ctx.fillText(label, cx, H - 28);
-    ctx.fillStyle = '#00a3a3';
+    ctx.fillStyle = '#41e3d1';
     ctx.fillText(`${Math.round(cumPct[i])}%`, cx, H - 12);
   });
 
@@ -1786,7 +1985,7 @@ function renderAiWorkflow() {
           ? 'No startups are available for evaluation.'
           : !notesReady
             ? `Add analyst notes first. ${selectedCandidate.name} currently has notes for ${notes.filled}/${notes.total} metrics.`
-            : `Ready to evaluate ${selectedCandidate.name}. Notes coverage: ${notes.filled}/${notes.total}. ${state.aiHealth?.aiProvider === 'fallback' ? 'Fallback rubric AI will be used until OpenAI is available.' : 'OpenAI review is available.'}`;
+            : `Ready to evaluate ${selectedCandidate.name}. Notes coverage: ${notes.filled}/${notes.total}. ${state.aiHealth?.aiProvider === 'fallback' ? 'Fallback rubric AI will be used.' : 'OpenAI review is available, with fallback enabled if the provider fails.'}`;
   els.aiStatus.textContent = state.aiStatusText || defaultStatus;
 
   if (els.aiHealthSummary) {
@@ -1801,6 +2000,9 @@ function renderAiWorkflow() {
     els.aiHealthSummary.innerHTML = healthItems
       .map(([label, value]) => `<div class="kpi"><div class="muted">${escapeHtml(label)}</div><strong>${escapeHtml(String(value))}</strong></div>`)
       .join('');
+    if (state.aiHealth?.aiReason) {
+      els.aiHealthSummary.innerHTML += `<div class="kpi"><div class="muted">Provider note</div><strong>${escapeHtml(state.aiHealth.aiReason)}</strong></div>`;
+    }
   }
 
   els.aiQueueSummary.innerHTML = [
@@ -1933,7 +2135,7 @@ function renderAnalysisActionBoard() {
     <div class="pipeline-item">
       <div class="pipeline-item-copy">
         <strong>${escapeHtml(candidate.name)}</strong>
-        <span>${escapeHtml(decisionBucketLabel(decisionBucket(candidate)))} · Total ${escapeHtml(fmt(candidate.computed.total))} · ${escapeHtml(candidateStage(candidate))}</span>
+        <span>${escapeHtml(decisionBucketLabel(decisionBucket(candidate)))} · Total ${escapeHtml(fmt(candidate.computed.total))} · ${escapeHtml(pipelineStageLabel(candidateStage(candidate)))}</span>
         ${metaHtml}
       </div>
       <div class="pipeline-item-actions">
@@ -2034,7 +2236,7 @@ function renderSelectedStartupBrief() {
       <div class="selected-brief-heading">
         <div>
           <h4>${escapeHtml(candidate.name)}</h4>
-          <p>${escapeHtml(stage)} · ${escapeHtml(quadrant)}</p>
+          <p>${escapeHtml(pipelineStageLabel(stage))} · ${escapeHtml(quadrant)}</p>
         </div>
         <div class="selected-brief-chips">
           ${tags.length ? tags.map((tag) => `<span class="brief-chip">${escapeHtml(tag)}</span>`).join('') : '<span class="brief-chip is-muted">No tags</span>'}
@@ -2043,7 +2245,7 @@ function renderSelectedStartupBrief() {
       <div class="selected-brief-controls">
         <label class="selected-brief-field">Stage
           <select data-action="brief-edit-stage" data-id="${escapeHtml(candidate.id)}">
-            ${['sourcing', 'diligence', 'ic-ready', 'watchlist', 'pass'].map((value) => `<option value="${escapeHtml(value)}"${stage === value ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+            ${pipelineStageOptions(stage)}
           </select>
         </label>
         <label class="selected-brief-field">Tags
@@ -2062,6 +2264,7 @@ function renderSelectedStartupBrief() {
         <div class="kpi"><div class="muted">Non-Fin</div><strong>${escapeHtml(fmt(candidate.computed.nonFinancial))}</strong></div>
         <div class="kpi"><div class="muted">Fin</div><strong>${escapeHtml(fmt(candidate.computed.financial))}</strong></div>
         <div class="kpi"><div class="muted">Notes</div><strong>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))}</strong></div>
+        <div class="kpi"><div class="muted">Confidence</div><strong>${escapeHtml(fmt(quality.confidence * 100, 0))}%</strong></div>
       </div>
     </div>
     <div class="selected-brief-insights">
@@ -2071,7 +2274,7 @@ function renderSelectedStartupBrief() {
       </div>
       <div class="decision-item">
         <strong>Coverage quality</strong>
-        <span>${fmt(quality.coverage * 100, 0)}% metric coverage across scored inputs</span>
+        <span>${fmt(quality.coverage * 100, 0)}% coverage · ${fmt(quality.confidence * 100, 0)}% confidence</span>
       </div>
       <div class="decision-item">
         <strong>Strongest weighted drivers</strong>
@@ -2238,12 +2441,14 @@ function renderCompare() {
   const { ctx, width: W, height: H } = prepareCanvas(els.compareCanvas);
   const pad = { l: 54, r: 18, t: 20, b: 116 };
   const plot = { x: pad.l, y: pad.t, w: W - pad.l - pad.r, h: H - pad.t - pad.b };
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#09111f'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#0f1a2d';
+  ctx.fillRect(plot.x, plot.y, plot.w, plot.h);
 
   const maxV = Math.max(1, ...valsA, ...valsB);
   const gw = plot.w / labels.length;
   const bw = Math.max(8, gw * 0.34);
-  ctx.strokeStyle = 'rgba(15,23,42,0.1)';
+  ctx.strokeStyle = 'rgba(143, 161, 194, 0.15)';
   for (let i = 0; i <= 4; i++) {
     const y = plot.y + plot.h * i / 4;
     ctx.beginPath(); ctx.moveTo(plot.x, y); ctx.lineTo(plot.x + plot.w, y); ctx.stroke();
@@ -2284,20 +2489,20 @@ function renderCompare() {
     const hA = (valsA[i] / maxV) * plot.h;
     const hB = (valsB[i] / maxV) * plot.h;
 
-    ctx.fillStyle = 'rgba(47,107,255,0.35)';
+    ctx.fillStyle = 'rgba(74,125,255,0.42)';
     ctx.fillRect(cx - bw - 2, plot.y + plot.h - hA, bw, hA);
-    ctx.strokeStyle = '#2f6bff';
+    ctx.strokeStyle = '#7aa2ff';
     ctx.strokeRect(cx - bw - 2, plot.y + plot.h - hA, bw, hA);
 
-    ctx.fillStyle = 'rgba(0,163,163,0.35)';
+    ctx.fillStyle = 'rgba(65,227,209,0.36)';
     ctx.fillRect(cx + 2, plot.y + plot.h - hB, bw, hB);
-    ctx.strokeStyle = '#00a3a3';
+    ctx.strokeStyle = '#41e3d1';
     ctx.strokeRect(cx + 2, plot.y + plot.h - hB, bw, hB);
 
     const laneWidth = Math.max(36, gw - 8);
     const metricName = fitText(lb.name, laneWidth);
 
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = '#dce7fb';
     ctx.textAlign = 'center';
     ctx.font = '11px "Helvetica Neue", Helvetica, Arial, sans-serif';
     ctx.fillText(lb.short, cx, H - 50);
@@ -2307,7 +2512,7 @@ function renderCompare() {
     ctx.beginPath();
     ctx.rect(cx - laneWidth / 2, H - 34, laneWidth, 28);
     ctx.clip();
-    ctx.fillStyle = '#64748b';
+    ctx.fillStyle = '#8fa1c2';
     ctx.font = '9.5px "Helvetica Neue", Helvetica, Arial, sans-serif';
     nameLines.forEach((line, lineIndex) => {
       ctx.fillText(line, cx, H - 24 + lineIndex * 12);
@@ -2371,46 +2576,16 @@ function emptyDraft() {
   };
 }
 
-function templateScores(key) {
-  const metrics = getMetrics();
-  if (key === 'blank') return Object.fromEntries(metrics.map((metric) => [metric.column, null]));
-  if (key === 'premium') return Object.fromEntries(metrics.map((metric) => [metric.column, 5]));
-  if (key === 'traction') {
-    return Object.fromEntries(metrics.map((metric) => {
-      const strong = ['revenue-business-model', 'product-differentiation', 'financial-health-investment'].includes(metric.key);
-      return [metric.column, strong ? 4 : 3];
-    }));
-  }
-  if (key === 'potential') {
-    return Object.fromEntries(metrics.map((metric) => {
-      if (metric.key === 'financial-health-investment') return [metric.column, 2];
-      const highPotential = ['team', 'market-competition', 'global-expansion-scalability', 'strategic-fit-exit'].includes(metric.key);
-      return [metric.column, highPotential ? 4 : 3];
-    }));
-  }
-  return Object.fromEntries(metrics.map((metric) => [metric.column, 3]));
-}
-
 function buildDraftFromSelections() {
   const draft = emptyDraft();
-  const cloneId = state.newDraftMeta.clone || '';
-  const cloneC = state.candidates.find((c) => c.id === cloneId) || null;
-  const tScores = templateScores(state.newDraftMeta.template || 'balanced');
 
   getNewStartupMetrics().forEach((m, index) => {
-    if (cloneC) {
-      draft.scores[m.column] = num(cloneC.scores[m.column]) ?? tScores[m.column] ?? null;
-      draft.externalScores[m.column] = num(cloneC.externalScores?.[m.column]) ?? null;
-      draft.aiScores[m.column] = num(cloneC.aiScores?.[m.column]) ?? null;
-      draft.notes[m.column] = (cloneC.notes?.[m.column] || '').trim();
-    } else {
-      draft.scores[m.column] = tScores[m.column] ?? null;
-      draft.externalScores[m.column] = null;
-      draft.aiScores[m.column] = null;
-      draft.notes[m.column] = state.newDraftMeta.notesMode === 'rubric'
-        ? newStartupPrompt(m, index)
-        : '';
-    }
+    draft.scores[m.column] = null;
+    draft.externalScores[m.column] = null;
+    draft.aiScores[m.column] = null;
+    draft.notes[m.column] = state.newDraftMeta.notesMode === 'rubric'
+      ? newStartupPrompt(m, index)
+      : '';
   });
 
   state.newDraft = draft;
@@ -2436,6 +2611,119 @@ function getNewStartupSections() {
     .filter((section) => section.metrics.length > 0);
 }
 
+function ensureNewIntakeSectionKey() {
+  const sections = getNewStartupSections();
+  if (!sections.length) {
+    state.newIntakeSectionKey = '';
+    return '';
+  }
+  const exists = sections.some((section) => section.key === state.newIntakeSectionKey);
+  if (!exists) {
+    state.newIntakeSectionKey = sections[0].key;
+  }
+  return state.newIntakeSectionKey;
+}
+
+function ensureNewIntakeOpenSections() {
+  const sections = getNewStartupSections();
+  const next = {};
+  sections.forEach((section, index) => {
+    if (Object.prototype.hasOwnProperty.call(state.newIntakeOpenSections, section.key)) {
+      next[section.key] = Boolean(state.newIntakeOpenSections[section.key]);
+    } else {
+      next[section.key] = index === 0;
+    }
+  });
+  state.newIntakeOpenSections = next;
+  return state.newIntakeOpenSections;
+}
+
+function metricEvidenceStrength(metric, note) {
+  const text = String(note || '').trim();
+  if (!text) return 0;
+  const words = text.split(/\s+/).filter(Boolean);
+  const promptMatches = metricEvidencePrompts(metric)
+    .map((prompt) => prompt.toLowerCase().split(/\s+/).filter((token) => token.length > 3))
+    .flat()
+    .filter((token, index, array) => array.indexOf(token) === index)
+    .filter((token) => text.toLowerCase().includes(token)).length;
+  const numbers = (text.match(/\b\d+([.,]\d+)?\b/g) || []).length;
+  const lengthSignal = Math.min(words.length / 45, 1);
+  const promptSignal = Math.min(promptMatches / 4, 1);
+  const numberSignal = Math.min(numbers / 3, 1);
+  return Math.max(0, Math.min(1, lengthSignal * 0.55 + promptSignal * 0.3 + numberSignal * 0.15));
+}
+
+function evidenceLabel(strength) {
+  if (strength >= 0.8) return 'Strong evidence';
+  if (strength >= 0.55) return 'Good evidence';
+  if (strength >= 0.3) return 'Light evidence';
+  return 'Missing evidence';
+}
+
+function metricDraftStatus(metric, draft) {
+  const scoreFilled = num(draft?.scores?.[metric.column]) !== null;
+  const note = String(draft?.notes?.[metric.column] || '').trim();
+  const noteFilled = Boolean(note);
+  const evidence = metricEvidenceStrength(metric, note);
+  return {
+    scoreFilled,
+    noteFilled,
+    complete: scoreFilled && noteFilled,
+    evidence,
+    evidenceLabel: evidenceLabel(evidence),
+  };
+}
+
+function sectionRequiredCount(section) {
+  if (!section?.metrics?.length) return 0;
+  return section.metrics.length;
+}
+
+function sectionProgress(section, draft) {
+  const metricStates = section.metrics.map((metric) => metricDraftStatus(metric, draft));
+  const completion = sectionCompletion(section.metrics, draft);
+  const required = sectionRequiredCount(section);
+  const evidence = metricStates.length
+    ? metricStates.reduce((sum, item) => sum + item.evidence, 0) / metricStates.length
+    : 0;
+  return {
+    ...completion,
+    required,
+    ready: completion.done >= required && required > 0,
+    evidence,
+    evidenceLabel: evidenceLabel(evidence),
+  };
+}
+
+function overallIntakeStatus() {
+  const sections = getNewStartupSections();
+  const key = ensureNewIntakeSectionKey();
+  const sectionStates = sections.map((section) => ({
+    section,
+    progress: sectionProgress(section, state.newDraft || emptyDraft()),
+  }));
+  const totalMetrics = sections.reduce((sum, section) => sum + section.metrics.length, 0);
+  const doneMetrics = sectionStates.reduce((sum, item) => sum + item.progress.done, 0);
+  const evidence = sectionStates.length
+    ? sectionStates.reduce((sum, item) => sum + item.progress.evidence, 0) / sectionStates.length
+    : 0;
+  const ready = Boolean((state.newDraftMeta.name || '').trim()) && sectionStates.every((item) => item.progress.ready);
+  const nextSection = sectionStates.find((item) => !item.progress.ready)?.section
+    || sectionStates.find((item) => item.section.key === key)?.section
+    || sections[0]
+    || null;
+  return {
+    sections,
+    sectionStates,
+    totalMetrics,
+    doneMetrics,
+    evidence,
+    ready,
+    nextSection,
+  };
+}
+
 function sectionCompletion(metrics, draft) {
   let done = 0;
   let missingScores = 0;
@@ -2451,65 +2739,47 @@ function sectionCompletion(metrics, draft) {
 }
 
 function renderNewForm() {
-  const templates = [
-    ['balanced', 'Balanced (all 3)'],
-    ['blank', 'Blank'],
-    ['potential', 'High Potential'],
-    ['traction', 'Traction'],
-    ['premium', 'Premium Benchmark'],
-  ];
-
-  if (!els.newTemplate.dataset.init) {
-    els.newTemplate.innerHTML = '';
-    templates.forEach(([v, t]) => {
-      const o = document.createElement('option');
-      o.value = v;
-      o.textContent = t;
-      els.newTemplate.appendChild(o);
-    });
-    els.newTemplate.value = 'balanced';
-    els.newTemplate.dataset.init = '1';
-  }
   els.newName.value = state.newDraftMeta.name || '';
-  els.newTemplate.value = state.newDraftMeta.template || 'balanced';
-
-  els.newClone.innerHTML = '<option value="">None</option>';
-  [...state.candidates].sort((a, b) => a.name.localeCompare(b.name)).forEach((c) => {
-    const o = document.createElement('option');
-    o.value = c.id;
-    o.textContent = c.name;
-    els.newClone.appendChild(o);
-  });
-  if ([...els.newClone.options].some((o) => o.value === state.newDraftMeta.clone)) els.newClone.value = state.newDraftMeta.clone;
-  else els.newClone.value = '';
   els.newNotesMode.value = state.newDraftMeta.notesMode || 'empty';
 
   if (!state.newDraft) buildDraftFromSelections();
+  ensureNewIntakeSectionKey();
+  ensureNewIntakeOpenSections();
   renderNewDraftStatus();
   renderNewDraftPicker();
 
+  const intake = overallIntakeStatus();
+
+  if (els.newModeRequirement) {
+    els.newModeRequirement.textContent = 'Required: every metric must have score and explanation.';
+  }
+
   els.newMetrics.innerHTML = '';
-  const sections = getNewStartupSections();
-  sections.forEach((section) => {
+  intake.sections.forEach((section) => {
+    const progress = sectionProgress(section, state.newDraft);
+    const requiredText = `Complete all ${progress.total} metrics in this section.`;
+
     const block = document.createElement('details');
     block.className = 'new-section';
     block.dataset.section = section.key;
-    block.open = section.open;
+    block.classList.toggle('is-ready', progress.ready);
+    block.open = Boolean(state.newIntakeOpenSections[section.key]);
+    block.addEventListener('toggle', () => {
+      state.newIntakeOpenSections[section.key] = block.open;
+      saveUi();
+    });
 
-    const comp = sectionCompletion(section.metrics, state.newDraft);
-    const allDone = comp.done === comp.total && comp.total > 0;
-    const blockingText = `${comp.missingScores} scores missing · ${comp.missingNotes} explanations missing`;
     const summary = document.createElement('summary');
     summary.className = 'new-section-summary';
     summary.innerHTML = `
       <span>
         <span class="new-section-title">${escapeHtml(section.title)}</span>
-        <span class="new-section-required ${allDone ? 'is-done' : ''}">
-          ${allDone ? 'All required fields complete' : escapeHtml(blockingText)}
+        <span class="new-section-required ${progress.ready ? 'is-done' : ''}">
+          ${progress.ready ? 'Section complete' : escapeHtml(requiredText)}
         </span>
       </span>
-      <span class="new-section-status ${allDone ? 'is-done' : ''}">
-        ${escapeHtml(String(comp.done))}/${escapeHtml(String(comp.total))} complete
+      <span class="new-section-status ${progress.ready ? 'is-done' : ''}">
+        ${escapeHtml(String(progress.done))}/${escapeHtml(String(progress.total))} complete
       </span>
     `;
     block.appendChild(summary);
@@ -2521,13 +2791,36 @@ function renderNewForm() {
       block.appendChild(description);
     }
 
+    const meta = document.createElement('div');
+    meta.className = 'new-section-meta';
+    meta.innerHTML = `
+      <span class="metric-chip ${progress.ready ? 'is-ready' : ''}">${escapeHtml(progress.ready ? 'Required complete' : 'Required now')}</span>
+      <span class="metric-chip">${escapeHtml(progress.evidenceLabel)}</span>
+      <span class="metric-chip">${escapeHtml(String(progress.missingScores))} scores missing</span>
+      <span class="metric-chip">${escapeHtml(String(progress.missingNotes))} explanations missing</span>
+    `;
+    block.appendChild(meta);
+
+    const body = document.createElement('div');
+    body.className = 'new-section-body';
+
     section.metrics.forEach((m, metricIndex) => {
+      const metricState = metricDraftStatus(m, state.newDraft);
       const row = document.createElement('div');
       row.className = 'metric-row';
+      row.dataset.metricRow = m.column;
+      row.classList.toggle('is-complete', metricState.complete);
 
       const head = document.createElement('div');
       head.className = 'metric-head';
-      head.innerHTML = `<span>${escapeHtml(displayColumn(m.column))} · ${escapeHtml(m.label)}</span><span class="muted">Weight: ${escapeHtml(String(m.weight))}</span>`;
+      head.innerHTML = `
+        <span>${escapeHtml(displayColumn(m.column))} · ${escapeHtml(m.label)}</span>
+        <span class="metric-head-side">
+          <span class="metric-chip ${metricState.complete ? 'is-ready' : ''}">${escapeHtml(metricState.complete ? 'Complete' : 'Missing required fields')}</span>
+          <span class="metric-chip">${escapeHtml(metricState.evidenceLabel)}</span>
+          <span class="muted">Weight: ${escapeHtml(String(m.weight))}</span>
+        </span>
+      `;
 
       const sl = document.createElement('label');
       sl.textContent = 'Analyst Score';
@@ -2541,7 +2834,7 @@ function renderNewForm() {
       sl.appendChild(select);
 
       const exl = document.createElement('label');
-      exl.textContent = 'External Score';
+      exl.textContent = 'External Score (optional)';
       const externalSelect = scoreSelect(state.newDraft.externalScores[m.column], (v) => { state.newDraft.externalScores[m.column] = v; });
       externalSelect.dataset.metric = m.column;
       externalSelect.dataset.role = 'external-score';
@@ -2549,10 +2842,10 @@ function renderNewForm() {
       exl.appendChild(externalSelect);
 
       const nl = document.createElement('label');
-      nl.textContent = 'Explanation';
+      nl.textContent = 'Analyst Evidence';
       const ta = document.createElement('textarea');
       ta.rows = 3;
-      ta.placeholder = newStartupPrompt(m, getNewStartupMetrics().indexOf(m));
+      ta.placeholder = `Capture what the analyst learned, what was verified, and what is still missing for ${m.label}.`;
       ta.value = state.newDraft.notes[m.column] || '';
       ta.dataset.metric = m.column;
       ta.dataset.role = 'note';
@@ -2565,7 +2858,7 @@ function renderNewForm() {
 
       const hint = document.createElement('p');
       hint.className = 'metric-evidence-hint';
-      hint.textContent = 'Evidence to collect:';
+      hint.textContent = 'What to capture in the note:';
       nl.appendChild(hint);
 
       const promptList = document.createElement('ul');
@@ -2592,9 +2885,10 @@ function renderNewForm() {
       ail.appendChild(aiValue);
 
       row.append(head, sl, exl, ail, nl);
-      block.appendChild(row);
+      body.appendChild(row);
     });
 
+    block.appendChild(body);
     els.newMetrics.appendChild(block);
   });
 
@@ -2609,28 +2903,53 @@ function renderNewForm() {
   });
   if ([...els.guideMetric.options].some((o) => o.value === current)) els.guideMetric.value = current;
   renderGuide();
+
+  els.createBtn.textContent = 'Create Startup';
 }
 
 function refreshNewSectionStatuses() {
-  const sections = getNewStartupSections();
-  sections.forEach((section) => {
+  const intake = overallIntakeStatus();
+  intake.sections.forEach((section) => {
     const block = els.newMetrics.querySelector(`.new-section[data-section="${section.key}"]`);
     if (!block) return;
-    const comp = sectionCompletion(section.metrics, state.newDraft);
-    const allDone = comp.done === comp.total && comp.total > 0;
+    const comp = sectionProgress(section, state.newDraft);
     const status = block.querySelector('.new-section-status');
     const required = block.querySelector('.new-section-required');
+    const meta = block.querySelector('.new-section-meta');
     if (status) {
       status.textContent = `${comp.done}/${comp.total} complete`;
-      status.classList.toggle('is-done', allDone);
+      status.classList.toggle('is-done', comp.ready);
     }
     if (required) {
-      required.textContent = allDone
-        ? 'All required fields complete'
-        : `${comp.missingScores} scores missing · ${comp.missingNotes} explanations missing`;
-      required.classList.toggle('is-done', allDone);
+      required.textContent = comp.ready
+        ? 'Section complete'
+        : `Complete all ${comp.total} metrics in this section.`;
+      required.classList.toggle('is-done', comp.ready);
     }
+    if (meta) {
+      meta.innerHTML = `
+        <span class="metric-chip ${comp.ready ? 'is-ready' : ''}">${escapeHtml(comp.ready ? 'Required complete' : 'Required now')}</span>
+        <span class="metric-chip">${escapeHtml(comp.evidenceLabel)}</span>
+        <span class="metric-chip">${escapeHtml(String(comp.missingScores))} scores missing</span>
+        <span class="metric-chip">${escapeHtml(String(comp.missingNotes))} explanations missing</span>
+      `;
+    }
+    section.metrics.forEach((metric) => {
+      const row = block.querySelector(`[data-metric-row="${metric.column}"]`);
+      if (!row) return;
+      const metricState = metricDraftStatus(metric, state.newDraft);
+      row.classList.toggle('is-complete', metricState.complete);
+      const chips = row.querySelectorAll('.metric-chip');
+      if (chips[0]) {
+        chips[0].textContent = metricState.complete ? 'Complete' : 'Missing required fields';
+        chips[0].classList.toggle('is-ready', metricState.complete);
+      }
+      if (chips[1]) {
+        chips[1].textContent = metricState.evidenceLabel;
+      }
+    });
   });
+  els.createBtn.textContent = 'Create Startup';
 }
 
 function renderGuide() {
@@ -2644,11 +2963,14 @@ function setFeedback(msg, type = 'neutral') {
 }
 
 function validateDraft() {
-  for (const m of getNewStartupMetrics()) {
-    const s = num(state.newDraft.scores[m.column]);
-    const n = (state.newDraft.notes[m.column] || '').trim();
-    if (s === null) return { ok: false, message: `Missing score for ${displayColumn(m.column)}.`, metric: m.column, role: 'analyst-score' };
-    if (!n) return { ok: false, message: `Missing explanation for ${displayColumn(m.column)}.`, metric: m.column, role: 'note' };
+  const sections = getNewStartupSections();
+  for (const section of sections) {
+    for (const m of section.metrics) {
+      const s = num(state.newDraft.scores[m.column]);
+      const n = (state.newDraft.notes[m.column] || '').trim();
+      if (s === null) return { ok: false, message: `Missing score for ${displayColumn(m.column)}.`, metric: m.column, role: 'analyst-score' };
+      if (!n) return { ok: false, message: `Missing explanation for ${displayColumn(m.column)}.`, metric: m.column, role: 'note' };
+    }
   }
   return { ok: true };
 }
@@ -2672,8 +2994,33 @@ function candidateTags(candidate) {
   return Array.isArray(candidate.tags) ? candidate.tags.filter(Boolean) : [];
 }
 
+function pipelineStageLabel(stage) {
+  return metricModel.stageLabel(stage);
+}
+
 function candidateStage(candidate) {
-  return candidate.stage || 'sourcing';
+  return metricModel.normalizeStage(candidate?.stage);
+}
+
+function nextPipelineStage(stage) {
+  const currentIndex = PIPELINE_STAGES.findIndex((item) => item.key === candidateStage({ stage }));
+  if (currentIndex < 0 || currentIndex >= PIPELINE_STAGES.length - 1) return null;
+  return PIPELINE_STAGES[currentIndex + 1].key;
+}
+
+function pipelineStageMeta(stage) {
+  const normalized = candidateStage({ stage });
+  if (normalized === 'on-deck') return { description: 'Fresh inbound deals and recently added startups.' };
+  if (normalized === 'first-look') return { description: 'Initial review, first notes, and early screening.' };
+  if (normalized === 'deep-dive') return { description: 'High-interest deals under active diligence.' };
+  if (normalized === 'ic-ready') return { description: 'Prepared for partner review and committee discussion.' };
+  return { description: 'Archived or declined deals with documented rationale.' };
+}
+
+function pipelineStageOptions(selectedStage) {
+  return PIPELINE_STAGES
+    .map((stage) => `<option value="${escapeHtml(stage.key)}"${candidateStage({ stage: selectedStage }) === stage.key ? ' selected' : ''}>${escapeHtml(stage.label)}</option>`)
+    .join('');
 }
 
 function candidateOwner(candidate) {
@@ -2701,22 +3048,13 @@ function formatActivityTimestamp(value) {
   return date.toLocaleString();
 }
 
-function pipelineColumnIsVisible(key) {
-  return state.pipelineColumns.includes(key);
-}
-
-function visiblePipelineColumns() {
-  const allowed = new Set(state.pipelineColumns);
-  return PIPELINE_COLUMN_OPTIONS.filter((option) => allowed.has(option.key));
-}
-
 function currentPipelineFilterSnapshot() {
   return {
     search: state.search,
     sort: state.sort,
     quadrant: state.quadrant,
     savedView: state.savedView,
-    columns: normalizePipelineColumns(state.pipelineColumns),
+    filters: normalizePipelineFilters(state.pipelineFilters),
   };
 }
 
@@ -2725,7 +3063,7 @@ function applyPipelineFilterSnapshot(snapshot = {}) {
   state.sort = String(snapshot.sort || 'total-desc');
   state.quadrant = String(snapshot.quadrant || 'all');
   state.savedView = String(snapshot.savedView || 'all');
-  state.pipelineColumns = normalizePipelineColumns(snapshot.columns);
+  state.pipelineFilters = normalizePipelineFilters(snapshot.filters);
 }
 
 function renderPipelineFilterControls() {
@@ -2748,16 +3086,6 @@ function renderPipelineFilterControls() {
   if (els.deletePipelineFilterBtn) {
     els.deletePipelineFilterBtn.disabled = !state.selectedPipelineFilterId;
   }
-}
-
-function renderPipelineColumnControls() {
-  if (!els.pipelineColumnList) return;
-  els.pipelineColumnList.innerHTML = PIPELINE_COLUMN_OPTIONS.map((option) => `
-    <label class="column-picker-item">
-      <input type="checkbox" data-action="toggle-pipeline-column" value="${escapeHtml(option.key)}"${pipelineColumnIsVisible(option.key) ? ' checked' : ''} />
-      <span>${escapeHtml(option.label)}</span>
-    </label>
-  `).join('');
 }
 
 function clearActivePipelineFilterSelection() {
@@ -2857,6 +3185,11 @@ function setDetailStatus(message, type = 'neutral') {
   els.detailStatus.dataset.type = type;
 }
 
+function setPipelinePreviewStatus(candidateId, message, type = 'neutral') {
+  if (!candidateId) return;
+  state.pipelinePreviewStatus[candidateId] = { message, type };
+}
+
 function passesSavedView(candidate) {
   const quality = pointQuality(candidate);
   if (state.savedView === 'ic-ready') {
@@ -2866,12 +3199,41 @@ function passesSavedView(candidate) {
       && quality.confidence >= 0.8;
   }
   if (state.savedView === 'needs-diligence') {
-    return quality.coverage < 1 || quality.confidence < 0.75 || candidateStage(candidate) === 'diligence';
+    return quality.coverage < 1 || quality.confidence < 0.75 || candidateStage(candidate) === 'deep-dive';
   }
   if (state.savedView === 'financial-weak') {
     return candidate.computed.financial < Number(state.thresholds.f || 0);
   }
+  if (state.savedView === 'low-evidence') {
+    return quality.coverage < 0.55 || quality.confidence < 0.5;
+  }
+  if (state.savedView === 'high-conviction') {
+    return quality.coverage >= 0.8
+      && quality.confidence >= 0.8
+      && candidate.computed.total >= scoringCore.median(state.candidates.map((c) => c.computed.total));
+  }
+  if (state.savedView === 'ai-pending') {
+    return !candidate.lastAiEvaluationId;
+  }
   return true;
+}
+
+function pipelineEvidenceLabel(coverage) {
+  if (coverage >= 0.8) return 'Strong';
+  if (coverage >= 0.55) return 'Moderate';
+  return 'Weak';
+}
+
+function pipelineConfidenceLabel(confidence) {
+  if (confidence >= 0.8) return 'High';
+  if (confidence >= 0.55) return 'Medium';
+  return 'Low';
+}
+
+function pipelineToneClass(value, medium = 0.55, high = 0.8) {
+  if (value >= high) return 'is-strong';
+  if (value >= medium) return 'is-medium';
+  return 'is-weak';
 }
 
 function selectedRowSet() {
@@ -2987,178 +3349,322 @@ async function refreshWeightPreview() {
   renderWeights();
 }
 
-function renderTable() {
-  const rows = visibleCandidates();
-  const thead = els.table.querySelector('thead');
-  const tbody = els.table.querySelector('tbody');
-  const selection = selectedRowSet();
-  const selectedVisible = visibleSelectedCount(rows);
-  const selectedTotal = state.selectedRows.length;
-  const visibleColumns = visiblePipelineColumns();
-  const headerCells = [
-    '<th class="table-cell-check"><input id="tableSelectAll" type="checkbox" /></th>',
-    '<th>Rank</th>',
-    '<th>Name</th>',
-    ...visibleColumns.map((column) => `<th>${escapeHtml(column.label)}</th>`),
-    '<th>Actions</th>',
+function renderPipelineSummaryStrip(rows) {
+  if (!els.pipelineSummaryStrip) return;
+  const staleDays = Number(state.pipelineFilters.staleDays);
+  const staleWindowDays = Number.isFinite(staleDays) && staleDays > 0 ? staleDays : 14;
+  const staleThreshold = staleWindowDays * 24 * 60 * 60 * 1000;
+  const staleCount = rows.filter((candidate) => {
+    const last = latestActivityAt(candidate);
+    if (!last) return true;
+    return Date.now() - new Date(last).getTime() >= staleThreshold;
+  }).length;
+  const inReview = rows.filter((candidate) => ['first-look', 'deep-dive'].includes(candidateStage(candidate))).length;
+  const icReady = rows.filter((candidate) => candidateStage(candidate) === 'ic-ready').length;
+  const passed = rows.filter((candidate) => candidateStage(candidate) === 'pass').length;
+  const avgTotal = rows.length ? scoringCore.average(rows.map((candidate) => candidate.computed.total)) : 0;
+  const items = [
+    { key: 'all', label: 'Total Pipeline', value: rows.length, helper: 'All visible startups' },
+    { key: 'in-review', label: 'In Review', value: inReview, helper: 'First Look + Deep Dive' },
+    { key: 'ic-ready', label: 'IC Ready', value: icReady, helper: 'Ready for partner review' },
+    { key: 'pass', label: 'Passed', value: passed, helper: 'Archived or declined deals' },
+    { key: 'avg-total', label: 'Avg Total Score', value: fmt(avgTotal), helper: 'Visible portfolio average' },
+    { key: 'stale', label: `Stale > ${staleWindowDays} Days`, value: staleCount, helper: 'Needs fresh activity' },
   ];
+  els.pipelineSummaryStrip.innerHTML = items.map((item) => `
+    <button
+      class="pipeline-summary-card${state.pipelineFilters.summary === item.key ? ' is-active' : ''}"
+      type="button"
+      data-action="pipeline-summary-filter"
+      data-summary="${escapeHtml(item.key)}"
+      ${item.key === 'avg-total' ? 'data-static="true"' : ''}
+    >
+      <span class="pipeline-summary-label">${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(String(item.value))}</strong>
+      <span class="pipeline-summary-helper">${escapeHtml(item.helper)}</span>
+    </button>
+  `).join('');
+}
 
+function renderPipelineFilterOptionControls() {
   renderPipelineFilterControls();
-  renderPipelineColumnControls();
-  thead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
-  tbody.innerHTML = '';
-  els.selectionStatus.textContent = `${selectedTotal} selected · ${rows.length} visible`;
-  els.selectVisibleToggle.checked = rows.length > 0 && selectedVisible === rows.length;
-  els.bulkTagBtn.disabled = selectedTotal === 0;
-  els.bulkStageBtn.disabled = selectedTotal === 0;
-  els.bulkDeleteBtn.disabled = selectedTotal === 0;
+  if (!els.pipelineOwnerFilter) return;
+  const owners = [...new Set(state.candidates.map((candidate) => candidateOwner(candidate)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const existing = state.pipelineFilters.owner;
+  els.pipelineOwnerFilter.innerHTML = ['<option value="all">All owners</option>']
+    .concat(owners.map((owner) => `<option value="${escapeHtml(owner)}">${escapeHtml(owner)}</option>`))
+    .join('');
+  els.pipelineOwnerFilter.value = owners.includes(existing) || existing === 'all' ? existing : 'all';
+}
 
-  rows.forEach((c, i) => {
-    const tr = document.createElement('tr');
-    tr.className = c.id === state.detailStartupId ? 'is-selected-row' : '';
-    tr.dataset.id = c.id;
-    tr.tabIndex = 0;
-    tr.setAttribute('role', 'button');
-
-    const tdCheck = document.createElement('td');
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.checked = selection.has(c.id);
-    checkbox.dataset.action = 'toggle-select';
-    checkbox.dataset.id = c.id;
-    tdCheck.appendChild(checkbox);
-
-    const tdRank = document.createElement('td');
-    tdRank.textContent = String(i + 1);
-
-    const tdName = document.createElement('td');
-    const inp = document.createElement('input');
-    inp.value = c.name;
-    inp.addEventListener('change', async () => {
-      const nextName = uniqueName(inp.value);
-      if (!nextName) {
-        inp.value = c.name;
-        return;
-      }
-      if (state.serverMode) {
-        try {
-          const saved = await updateStartupRemote(c.id, { name: nextName });
-          Object.assign(c, saved);
-        } catch (error) {
-          alert(error.message);
-          inp.value = c.name;
-          return;
-        }
-      } else {
-        c.name = nextName;
-      }
-      recomputeAll();
-      save();
-      renderAll();
-    });
-    tdName.appendChild(inp);
-    const dynamicCells = visibleColumns.map((column) => {
-      const td = document.createElement('td');
-      td.dataset.column = column.key;
-      if (column.key === 'owner') {
-        const ownerInput = document.createElement('input');
-        ownerInput.value = candidateOwner(c);
-        ownerInput.placeholder = 'Assign owner';
-        ownerInput.dataset.action = 'edit-owner';
-        ownerInput.dataset.id = c.id;
-        td.appendChild(ownerInput);
-        return td;
-      }
-      if (column.key === 'tags') {
-        const tagInput = document.createElement('input');
-        tagInput.value = candidateTags(c).join(', ');
-        tagInput.placeholder = 'Add tags';
-        tagInput.dataset.action = 'edit-tags';
-        tagInput.dataset.id = c.id;
-        td.appendChild(tagInput);
-        return td;
-      }
-      if (column.key === 'stage') {
-        const stageSelect = document.createElement('select');
-        ['sourcing', 'diligence', 'ic-ready', 'watchlist', 'pass'].forEach((stage) => {
-          const option = document.createElement('option');
-          option.value = stage;
-          option.textContent = stage;
-          stageSelect.appendChild(option);
-        });
-        stageSelect.value = candidateStage(c);
-        stageSelect.dataset.action = 'edit-stage';
-        stageSelect.dataset.id = c.id;
-        td.appendChild(stageSelect);
-        return td;
-      }
-      if (column.key === 'nonFin') {
-        td.textContent = fmt(c.computed.nonFinancial);
-        return td;
-      }
-      if (column.key === 'fin') {
-        td.textContent = fmt(c.computed.financial);
-        return td;
-      }
-      if (column.key === 'total') {
-        td.innerHTML = `<span class="score-chip">${fmt(c.computed.total)}</span>`;
-        return td;
-      }
-      if (column.key === 'quadrant') {
-        td.textContent = quadrantOf(c);
-        return td;
-      }
-      if (column.key === 'lastActivity') {
-        const latest = latestActivityEntry(c);
-        td.innerHTML = `
-          <div class="table-meta-stack">
-            <strong>${escapeHtml(formatActivityTimestamp(latest?.at || null))}</strong>
-            <span>${escapeHtml(latest?.type || 'No activity')}</span>
+function renderPipelineBoard(rows) {
+  if (!els.pipelineBoard) return;
+  const selection = selectedRowSet();
+  els.pipelineBoard.innerHTML = PIPELINE_STAGES.map((stage) => {
+    const stageRows = rows.filter((candidate) => candidateStage(candidate) === stage.key);
+    const avgScore = stageRows.length ? scoringCore.average(stageRows.map((candidate) => candidate.computed.total)) : 0;
+    const avgConfidence = stageRows.length ? scoringCore.average(stageRows.map((candidate) => pointQuality(candidate).confidence)) : 0;
+    const meta = pipelineStageMeta(stage.key);
+    return `
+      <section class="pipeline-lane" data-stage="${escapeHtml(stage.key)}">
+        <header class="pipeline-lane-head">
+          <div>
+            <h3>${escapeHtml(stage.label)}</h3>
+            <p>${escapeHtml(meta.description)}</p>
           </div>
-        `;
-        return td;
-      }
-      return td;
-    });
+          <div class="pipeline-lane-kpis">
+            <span>${escapeHtml(String(stageRows.length))} deals</span>
+            <span>Avg ${escapeHtml(fmt(avgScore))}</span>
+            <span>${escapeHtml(fmt(avgConfidence * 100, 0))}% conf.</span>
+          </div>
+        </header>
+        <div class="pipeline-lane-dropzone" data-stage-dropzone="${escapeHtml(stage.key)}">
+          ${stageRows.length ? stageRows.map((candidate) => {
+            const quality = pointQuality(candidate);
+            const notes = noteCoverageSummary(candidate);
+            const tags = candidateTags(candidate);
+            const latest = latestActivityEntry(candidate);
+            const signal = evaluationSignalSummary(candidate);
+            return `
+              <article
+                class="pipeline-card${state.pipelineDrawerId === candidate.id ? ' is-active' : ''}"
+                data-candidate-id="${escapeHtml(candidate.id)}"
+                data-stage="${escapeHtml(stage.key)}"
+                draggable="true"
+              >
+                <div class="pipeline-card-top">
+                  <label class="pipeline-card-select" aria-label="Select ${escapeHtml(candidate.name)}">
+                    <input type="checkbox" data-action="pipeline-select" data-id="${escapeHtml(candidate.id)}"${selection.has(candidate.id) ? ' checked' : ''} />
+                  </label>
+                  <div class="pipeline-card-title">
+                    <strong>${escapeHtml(candidate.name)}</strong>
+                    <span>${escapeHtml(candidateOwner(candidate) || 'Unassigned owner')}</span>
+                  </div>
+                  <span class="pipeline-stage-pill">${escapeHtml(stage.label)}</span>
+                </div>
+                <div class="pipeline-card-tags">
+                  ${tags.length ? tags.map((tag) => `<span class="brief-chip">${escapeHtml(tag)}</span>`).join('') : '<span class="brief-chip is-muted">No tags</span>'}
+                </div>
+                <div class="pipeline-card-score-grid">
+                  <div><span>NF</span><strong>${escapeHtml(fmt(candidate.computed.nonFinancial))}</strong></div>
+                  <div><span>F</span><strong>${escapeHtml(fmt(candidate.computed.financial))}</strong></div>
+                  <div><span>Total</span><strong>${escapeHtml(fmt(candidate.computed.total))}</strong></div>
+                </div>
+                <div class="pipeline-card-signal-grid">
+                  <span class="table-quality-pill ${pipelineToneClass(quality.coverage)}">${escapeHtml(fmt(quality.coverage * 100, 0))}% evidence</span>
+                  <span class="table-quality-pill ${pipelineToneClass(quality.confidence)}">${escapeHtml(fmt(quality.confidence * 100, 0))}% confidence</span>
+                  <span class="table-quality-pill">${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))} notes</span>
+                  <span class="table-quality-pill">${escapeHtml(candidate.lastAiEvaluationId ? 'AI reviewed' : 'AI pending')}</span>
+                </div>
+                <div class="pipeline-card-meta">
+                  <span>${escapeHtml(quadrantOf(candidate))}</span>
+                  <span>${escapeHtml(latest ? `${latest.type} · ${formatActivityTimestamp(latest.at)}` : 'No activity yet')}</span>
+                </div>
+                <div class="pipeline-card-actions">
+                  <button class="ghost" type="button" data-action="pipeline-open-detail" data-id="${escapeHtml(candidate.id)}">Open</button>
+                  <button class="ghost" type="button" data-action="pipeline-run-ai" data-id="${escapeHtml(candidate.id)}"${state.serverMode ? '' : ' disabled'}>Run AI Review</button>
+                  <button class="ghost" type="button" data-action="pipeline-move-next" data-id="${escapeHtml(candidate.id)}"${nextPipelineStage(stage.key) ? '' : ' disabled'}>Move Forward</button>
+                  <button class="ghost" type="button" data-action="pipeline-mark-pass" data-id="${escapeHtml(candidate.id)}"${stage.key === 'pass' ? ' disabled' : ''}>Mark Pass</button>
+                  <button class="ghost" type="button" data-action="pipeline-add-note" data-id="${escapeHtml(candidate.id)}">Add Note</button>
+                </div>
+                ${signal.summary ? `<p class="pipeline-card-summary">${escapeHtml(signal.summary)}</p>` : ''}
+              </article>
+            `;
+          }).join('') : '<div class="pipeline-lane-empty">No startups in this stage.</div>'}
+        </div>
+      </section>
+    `;
+  }).join('');
+}
 
-    const tdA = document.createElement('td');
-    const rm = document.createElement('button');
-    rm.className = 'remove-btn';
-    rm.textContent = 'Remove';
-    rm.type = 'button';
-    rm.addEventListener('click', async () => {
-      if (state.serverMode) {
-        try {
-          await apiJson(`${STARTUPS_URL}/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
-        } catch (error) {
-          alert(error.message);
-          return;
-        }
-      }
-      state.candidates = state.candidates.filter((x) => x.id !== c.id);
-      ensureCompareSelection();
-      recomputeAll();
-      save();
-      renderAll();
-      refreshRemoteDerivedData({ workflow: true }).catch(console.error);
-    });
-    tdA.appendChild(rm);
-
-    tr.append(tdCheck, tdRank, tdName, ...dynamicCells, tdA);
-    tbody.appendChild(tr);
-  });
-
-  if (!rows.length) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = headerCells.length;
-    td.innerHTML = '<div class="table-empty-state">No startups match the current pipeline filters.</div>';
-    tr.appendChild(td);
-    tbody.appendChild(tr);
+function renderPipelineDrawer() {
+  if (!els.pipelineDrawer) return;
+  const candidate = getCandidateById(state.pipelineDrawerId);
+  if (!candidate) {
+    els.pipelineDrawer.innerHTML = `
+      <div class="pipeline-drawer-empty">
+        <h3>Startup Drawer</h3>
+        <p>Select a startup card to inspect the current thesis, risks, signals, and next actions without leaving the board.</p>
+      </div>
+    `;
+    return;
   }
+  const detail = startupDetail(candidate);
+  const quality = pointQuality(candidate);
+  const notes = noteCoverageSummary(candidate);
+  const strongest = topMetricContributors(candidate, 3);
+  const weakest = fastestImprovementGaps(candidate, 3);
+  const latest = latestActivityEntry(candidate);
+  const previewStatus = state.pipelinePreviewStatus[candidate.id] || null;
+  els.pipelineDrawer.innerHTML = `
+    <div class="pipeline-drawer-head">
+      <div>
+        <h3>${escapeHtml(candidate.name)}</h3>
+        <p>${escapeHtml(pipelineStageLabel(candidateStage(candidate)))} · ${escapeHtml(quadrantOf(candidate))}</p>
+      </div>
+      <button class="ghost" type="button" data-action="pipeline-close-drawer">Close</button>
+    </div>
+    <div class="pipeline-drawer-kpis">
+      <div class="kpi"><div class="muted">Owner</div><strong>${escapeHtml(candidateOwner(candidate) || 'Unassigned')}</strong></div>
+      <div class="kpi"><div class="muted">Last Activity</div><strong>${escapeHtml(latest ? formatActivityTimestamp(latest.at) : '—')}</strong></div>
+      <div class="kpi"><div class="muted">Evidence</div><strong>${escapeHtml(fmt(quality.coverage * 100, 0))}%</strong></div>
+      <div class="kpi"><div class="muted">Confidence</div><strong>${escapeHtml(fmt(quality.confidence * 100, 0))}%</strong></div>
+      <div class="kpi"><div class="muted">Notes</div><strong>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))}</strong></div>
+    </div>
+    <div class="pipeline-drawer-section">
+      <h4>Summary</h4>
+      <p>${escapeHtml(detail.overview.summary || 'No summary recorded yet.')}</p>
+    </div>
+    <div class="pipeline-drawer-section">
+      <h4>Investment Thesis</h4>
+      <p>${escapeHtml(detail.overview.thesis || 'No thesis recorded yet.')}</p>
+    </div>
+    <div class="pipeline-drawer-section">
+      <h4>Top Risks</h4>
+      <p>${escapeHtml(evaluationSignalSummary(candidate).risks.length ? evaluationSignalSummary(candidate).risks.join(' · ') : 'No AI risks identified yet.')}</p>
+    </div>
+    <div class="pipeline-drawer-section">
+      <h4>Next Step</h4>
+      <p>${escapeHtml(detail.overview.nextStep || 'No next step defined.')}</p>
+    </div>
+    <div class="pipeline-drawer-section">
+      <h4>Strongest Drivers</h4>
+      <p>${escapeHtml(strongest.length ? strongest.map((metric) => `${displayColumn(metric.column)} ${metric.label}`).join(' · ') : 'No strong drivers surfaced yet.')}</p>
+    </div>
+    <div class="pipeline-drawer-section">
+      <h4>Weakest Metrics</h4>
+      <p>${escapeHtml(weakest.length ? weakest.map((metric) => `${displayColumn(metric.column)} ${metric.label}`).join(' · ') : 'No score gaps surfaced.')}</p>
+    </div>
+    <div class="pipeline-drawer-actions">
+      <button class="ghost" type="button" data-action="pipeline-open-full-detail" data-id="${escapeHtml(candidate.id)}">Open Startup Detail</button>
+      <button type="button" data-action="pipeline-run-ai" data-id="${escapeHtml(candidate.id)}"${state.serverMode ? '' : ' disabled'}>Run AI Review</button>
+      <button class="ghost" type="button" data-action="pipeline-move-next" data-id="${escapeHtml(candidate.id)}"${nextPipelineStage(candidateStage(candidate)) ? '' : ' disabled'}>Move to Next Stage</button>
+      <button class="ghost" type="button" data-action="pipeline-mark-pass" data-id="${escapeHtml(candidate.id)}"${candidateStage(candidate) === 'pass' ? ' disabled' : ''}>Mark Pass</button>
+      <button class="ghost" type="button" data-action="pipeline-add-note" data-id="${escapeHtml(candidate.id)}">Add Quick Note</button>
+    </div>
+    ${previewStatus?.message ? `<div class="pipeline-preview-status" data-type="${escapeHtml(previewStatus.type || 'neutral')}">${escapeHtml(previewStatus.message)}</div>` : ''}
+  `;
+}
 
-  const headerToggle = document.getElementById('tableSelectAll');
-  if (headerToggle) headerToggle.checked = rows.length > 0 && selectedVisible === rows.length;
+function renderPipelinePage() {
+  const rows = visibleCandidates();
+  renderPipelineFilterOptionControls();
+  renderPipelineSummaryStrip(rows);
+  renderPipelineBoard(rows);
+  renderPipelineDrawer();
+  const selectedTotal = state.selectedRows.length;
+  const visibleSelected = visibleSelectedCount(rows);
+  if (els.selectionStatus) {
+    els.selectionStatus.textContent = `${selectedTotal} selected · ${visibleSelected} visible selected · ${rows.length} visible`;
+  }
+  if (els.bulkTagBtn) els.bulkTagBtn.disabled = selectedTotal === 0;
+  if (els.bulkStageBtn) els.bulkStageBtn.disabled = selectedTotal === 0;
+  if (els.clearPipelineSelectionBtn) els.clearPipelineSelectionBtn.disabled = selectedTotal === 0;
+  if (els.bulkDeleteBtn) els.bulkDeleteBtn.disabled = selectedTotal === 0;
+}
+
+function openPipelineDrawer(candidateId) {
+  state.pipelineDrawerId = candidateId || null;
+  save();
+  renderPipelinePage();
+}
+
+function appendLocalHistory(candidate, entry) {
+  const detail = startupDetail(candidate);
+  candidate.detail = {
+    ...detail,
+    history: [entry, ...(detail.history || [])].slice(0, 100),
+  };
+}
+
+async function persistPipelineStageChange(candidate, nextStage, options = {}) {
+  const { source = 'pipeline-drawer', passReason = '', successMessage = 'Stage saved.' } = options;
+  const previousStage = candidateStage(candidate);
+  candidate.stage = nextStage;
+  setPipelinePreviewStatus(candidate.id, `Saving ${pipelineStageLabel(nextStage)}…`, 'neutral');
+  renderPipelinePage();
+  try {
+    if (state.serverMode) {
+      const saved = await updateStartupRemote(candidate.id, {
+        stage: nextStage,
+        source,
+        passReason: passReason || undefined,
+      });
+      Object.assign(candidate, saved);
+    } else {
+      appendLocalHistory(candidate, createHistoryEntry('stage', `Stage changed from ${pipelineStageLabel(previousStage)} to ${pipelineStageLabel(nextStage)} via ${source}.${passReason ? ` Reason: ${passReason}` : ''}`));
+    }
+    recomputeAll();
+    save();
+    setPipelinePreviewStatus(candidate.id, successMessage, 'success');
+    renderAll();
+    refreshRemoteDerivedData({ workflow: true }).catch(console.error);
+  } catch (error) {
+    candidate.stage = previousStage;
+    setPipelinePreviewStatus(candidate.id, error.message, 'error');
+    save();
+    renderPipelinePage();
+  }
+}
+
+async function runPipelineAiReview(candidateId, requestedBy = 'pipeline-board') {
+  const candidate = getCandidateById(candidateId);
+  if (!candidate || !state.serverMode) return;
+  setPipelinePreviewStatus(candidateId, 'Running AI review…', 'neutral');
+  renderPipelinePage();
+  try {
+    const result = await apiJson(EVALUATION_JOBS_RUN_NOW_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        startupId: candidateId,
+        requestedBy,
+        payload: { trigger: requestedBy },
+      }),
+    });
+    if (result?.startup?.id) {
+      const current = getCandidateById(result.startup.id);
+      if (current) Object.assign(current, result.startup);
+    }
+    recomputeAll();
+    state.aiSelectedStartupId = candidateId;
+    await refreshEvaluationWorkflow({ render: false });
+    await refreshAnalytics({ render: false });
+    save();
+    setPipelinePreviewStatus(candidateId, `AI review completed for ${candidate.name}.`, 'success');
+    renderAll();
+  } catch (error) {
+    setPipelinePreviewStatus(candidateId, error.message, 'error');
+    renderPipelinePage();
+  }
+}
+
+async function addQuickPipelineNote(candidateId) {
+  const candidate = getCandidateById(candidateId);
+  if (!candidate) return;
+  const note = window.prompt(`Add a quick note for ${candidate.name}:`, '');
+  if (!note || !note.trim()) return;
+  const detail = startupDetail(candidate);
+  candidate.detail = {
+    ...detail,
+    history: [createHistoryEntry('note', note.trim()), ...(detail.history || [])].slice(0, 100),
+  };
+  setPipelinePreviewStatus(candidateId, 'Saving note…', 'neutral');
+  renderPipelinePage();
+  try {
+    if (state.serverMode) {
+      const saved = await updateStartupRemote(candidateId, {
+        detail: candidate.detail,
+      });
+      Object.assign(candidate, saved);
+    }
+    save();
+    setPipelinePreviewStatus(candidateId, 'Quick note saved.', 'success');
+    renderPipelinePage();
+  } catch (error) {
+    setPipelinePreviewStatus(candidateId, error.message, 'error');
+    renderPipelinePage();
+  }
 }
 
 function renderStartupRecordHero(candidate) {
@@ -3179,7 +3685,7 @@ function renderStartupRecordHero(candidate) {
       <div class="selected-brief-heading">
         <div>
           <h4>${escapeHtml(candidate.name)}</h4>
-          <p>${escapeHtml(stage)} · ${escapeHtml(quadrantOf(candidate))}</p>
+          <p>${escapeHtml(pipelineStageLabel(stage))} · ${escapeHtml(quadrantOf(candidate))}</p>
         </div>
         <div class="selected-brief-chips">
           ${tags.length ? tags.map((tag) => `<span class="brief-chip">${escapeHtml(tag)}</span>`).join('') : '<span class="brief-chip is-muted">No tags</span>'}
@@ -3188,6 +3694,7 @@ function renderStartupRecordHero(candidate) {
       <div class="selected-brief-kpis">
         <div class="kpi"><div class="muted">Total</div><strong>${escapeHtml(fmt(candidate.computed.total))}</strong></div>
         <div class="kpi"><div class="muted">Coverage</div><strong>${escapeHtml(fmt(quality.coverage * 100, 0))}%</strong></div>
+        <div class="kpi"><div class="muted">Confidence</div><strong>${escapeHtml(fmt(quality.confidence * 100, 0))}%</strong></div>
         <div class="kpi"><div class="muted">Notes</div><strong>${escapeHtml(String(notes.filled))}/${escapeHtml(String(notes.total))}</strong></div>
         <div class="kpi"><div class="muted">Diligence</div><strong>${escapeHtml(detail.diligence.status)}</strong></div>
       </div>
@@ -3226,7 +3733,7 @@ function renderStartupRecordTabContent(candidate) {
             <div class="startup-record-meta-grid">
               <label>Stage
                 <select data-action="detail-stage">
-                  ${['sourcing', 'diligence', 'ic-ready', 'watchlist', 'pass'].map((value) => `<option value="${escapeHtml(value)}"${candidateStage(candidate) === value ? ' selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+                  ${pipelineStageOptions(candidateStage(candidate))}
                 </select>
               </label>
               <label>Owner
@@ -3339,11 +3846,19 @@ function renderStartupRecordTabContent(candidate) {
       const score = num(candidate.scores?.[metric.column]);
       const note = String(candidate.notes?.[metric.column] || '').trim();
       const metricIndex = metrics.findIndex((item) => item.column === metric.column);
+      const metricState = metricDraftStatus(metric, {
+        scores: candidate.scores || {},
+        notes: candidate.notes || {},
+      });
       return `
         <div class="startup-note-card">
           <div class="startup-note-head">
             <strong>${escapeHtml(displayColumn(metric.column))} · ${escapeHtml(metric.label)}</strong>
             <span class="muted">Weight ${escapeHtml(fmt(metric.weight, 0))}</span>
+          </div>
+          <div class="new-section-meta startup-metric-meta">
+            <span class="metric-chip ${metricState.complete ? 'is-ready' : ''}">${escapeHtml(metricState.complete ? 'Complete' : 'Missing fields')}</span>
+            <span class="metric-chip">${escapeHtml(metricState.evidenceLabel)}</span>
           </div>
           <div class="startup-inline-grid">
             <label class="startup-inline-field">Analyst Score
@@ -3856,7 +4371,7 @@ async function persistBriefPatch(candidateId, patch, options = {}) {
     if (rerender) {
       renderSelectedStartupBrief();
       renderAnalysisActionBoard();
-      renderTable();
+      renderPipelinePage();
       renderAiWorkflow();
     }
     setBriefEditStatus(successMessage, 'success');
@@ -3866,7 +4381,7 @@ async function persistBriefPatch(candidateId, patch, options = {}) {
     if (rerender) {
       renderSelectedStartupBrief();
       renderAnalysisActionBoard();
-      renderTable();
+      renderPipelinePage();
       renderAiWorkflow();
     }
   }
@@ -3917,6 +4432,12 @@ function renderControls() {
   els.sortSelect.value = state.sort;
   els.quadrantSelect.value = state.quadrant;
   els.savedViewSelect.value = state.savedView;
+  if (els.pipelineAdvancedFilters) els.pipelineAdvancedFilters.open = state.pipelineAdvancedOpen;
+  if (els.pipelineOwnerFilter) els.pipelineOwnerFilter.value = state.pipelineFilters.owner;
+  if (els.pipelineTagFilter) els.pipelineTagFilter.value = state.pipelineFilters.tags;
+  if (els.pipelineConfidenceFilter) els.pipelineConfidenceFilter.value = state.pipelineFilters.confidence;
+  if (els.pipelineEvidenceFilter) els.pipelineEvidenceFilter.value = state.pipelineFilters.evidence;
+  if (els.pipelineStaleFilter) els.pipelineStaleFilter.value = state.pipelineFilters.staleDays;
   els.presetSelect.value = state.weightPreset;
 }
 
@@ -3927,7 +4448,7 @@ function renderAll() {
   renderStartupDetailPage();
   renderCompare();
   renderNewForm();
-  renderTable();
+  renderPipelinePage();
   renderWeights();
 }
 
@@ -4293,6 +4814,7 @@ function attachEvents() {
     setBriefEditStatus('Saving stage…', 'neutral');
     persistBriefPatch(candidate.id, {
       stage: target.value,
+      source: 'analysis-brief',
     }, {
       rerender: true,
       successMessage: 'Stage saved.',
@@ -4321,15 +4843,16 @@ function attachEvents() {
     state.search = els.searchInput.value;
     clearActivePipelineFilterSelection();
     save();
-    renderTable();
+    renderPipelinePage();
     renderScatter();
+    renderAnalysisPanels();
   });
 
   els.sortSelect.addEventListener('change', () => {
     state.sort = els.sortSelect.value;
     clearActivePipelineFilterSelection();
     save();
-    renderTable();
+    renderPipelinePage();
     renderScatter();
     renderAnalysisPanels();
   });
@@ -4338,7 +4861,7 @@ function attachEvents() {
     state.quadrant = els.quadrantSelect.value;
     clearActivePipelineFilterSelection();
     save();
-    renderTable();
+    renderPipelinePage();
     renderScatter();
     renderAnalysisPanels();
   });
@@ -4348,9 +4871,60 @@ function attachEvents() {
     clearActivePipelineFilterSelection();
     state.selectedRows = [];
     save();
-    renderTable();
+    renderPipelinePage();
     renderScatter();
     renderAnalysisPanels();
+  });
+
+  els.pipelineOpenNewBtn?.addEventListener('click', () => {
+    state.activePane = 'new';
+    save();
+    renderAll();
+  });
+
+  els.pipelineAdvancedFilters?.addEventListener('toggle', () => {
+    state.pipelineAdvancedOpen = els.pipelineAdvancedFilters.open;
+    save();
+  });
+
+  els.pipelineOwnerFilter?.addEventListener('change', () => {
+    state.pipelineFilters.owner = els.pipelineOwnerFilter.value || 'all';
+    clearActivePipelineFilterSelection();
+    state.selectedRows = [];
+    save();
+    renderPipelinePage();
+  });
+
+  els.pipelineTagFilter?.addEventListener('input', () => {
+    state.pipelineFilters.tags = els.pipelineTagFilter.value || '';
+    clearActivePipelineFilterSelection();
+    state.selectedRows = [];
+    save();
+    renderPipelinePage();
+  });
+
+  els.pipelineConfidenceFilter?.addEventListener('change', () => {
+    state.pipelineFilters.confidence = els.pipelineConfidenceFilter.value || 'all';
+    clearActivePipelineFilterSelection();
+    state.selectedRows = [];
+    save();
+    renderPipelinePage();
+  });
+
+  els.pipelineEvidenceFilter?.addEventListener('change', () => {
+    state.pipelineFilters.evidence = els.pipelineEvidenceFilter.value || 'all';
+    clearActivePipelineFilterSelection();
+    state.selectedRows = [];
+    save();
+    renderPipelinePage();
+  });
+
+  els.pipelineStaleFilter?.addEventListener('change', () => {
+    state.pipelineFilters.staleDays = els.pipelineStaleFilter.value || 'all';
+    clearActivePipelineFilterSelection();
+    state.selectedRows = [];
+    save();
+    renderPipelinePage();
   });
 
   els.pipelineFilterSelect?.addEventListener('change', () => {
@@ -4363,7 +4937,7 @@ function attachEvents() {
     }
     save();
     renderControls();
-    renderTable();
+    renderPipelinePage();
     renderScatter();
     renderAnalysisPanels();
   });
@@ -4385,7 +4959,7 @@ function attachEvents() {
     }
     state.selectedPipelineFilterId = nextFilter.id;
     save();
-    renderTable();
+    renderPipelinePage();
   });
 
   els.deletePipelineFilterBtn?.addEventListener('click', () => {
@@ -4393,32 +4967,12 @@ function attachEvents() {
     state.pipelineSavedFilters = state.pipelineSavedFilters.filter((filter) => filter.id !== state.selectedPipelineFilterId);
     state.selectedPipelineFilterId = '';
     save();
-    renderTable();
-  });
-
-  els.pipelineColumnList?.addEventListener('change', (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    if (target.dataset.action !== 'toggle-pipeline-column') return;
-    const set = new Set(normalizePipelineColumns(state.pipelineColumns));
-    if (target.checked) set.add(target.value);
-    else set.delete(target.value);
-    state.pipelineColumns = normalizePipelineColumns([...set]);
-    clearActivePipelineFilterSelection();
-    save();
-    renderTable();
-  });
-
-  els.selectVisibleToggle.addEventListener('change', () => {
-    const rows = visibleCandidates();
-    if (els.selectVisibleToggle.checked) state.selectedRows = rows.map((row) => row.id);
-    else state.selectedRows = [];
-    save();
-    renderTable();
+    renderPipelinePage();
   });
 
   els.bulkTagBtn.addEventListener('click', async () => {
     const tags = normalizeTagList(els.bulkTagInput.value);
+    if (!tags.length || !state.selectedRows.length) return;
     if (state.serverMode) {
       try {
         await Promise.all(state.selectedRows.map((id) => {
@@ -4434,14 +4988,21 @@ function attachEvents() {
     applyTagToSelected(tags);
     els.bulkTagInput.value = '';
     save();
-    renderTable();
+    renderPipelinePage();
   });
 
   els.bulkStageBtn.addEventListener('click', async () => {
     const nextStage = els.bulkStageSelect.value;
+    if (!nextStage || !state.selectedRows.length) return;
+    const passReason = nextStage === 'pass' ? window.prompt('Why is this startup being marked Pass?', '') : '';
+    if (nextStage === 'pass' && passReason === null) return;
     if (state.serverMode) {
       try {
-        await Promise.all(state.selectedRows.map((id) => updateStartupRemote(id, { stage: nextStage })));
+        await Promise.all(state.selectedRows.map((id) => updateStartupRemote(id, {
+          stage: nextStage,
+          source: 'bulk-action',
+          passReason: passReason || undefined,
+        })));
       } catch (error) {
         alert(error.message);
         return;
@@ -4450,7 +5011,13 @@ function attachEvents() {
     applyStageToSelected(nextStage);
     els.bulkStageSelect.value = '';
     save();
-    renderTable();
+    renderPipelinePage();
+  });
+
+  els.clearPipelineSelectionBtn?.addEventListener('click', () => {
+    state.selectedRows = [];
+    save();
+    renderPipelinePage();
   });
 
   els.bulkDeleteBtn.addEventListener('click', async () => {
@@ -4468,89 +5035,165 @@ function attachEvents() {
     refreshRemoteDerivedData({ workflow: true }).catch(console.error);
   });
 
-  els.table.addEventListener('click', (event) => {
+  els.pipelineSummaryStrip?.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    if (target.closest('input, select, button, textarea, label')) return;
-    const row = target.closest('tr[data-id]');
-    if (!row) return;
-    openStartupDetail(row.dataset.id, 'overview');
+    const trigger = target.closest('[data-action="pipeline-summary-filter"]');
+    if (!trigger) return;
+    if (trigger instanceof HTMLElement && trigger.dataset.static === 'true') return;
+    const summary = trigger instanceof HTMLElement ? trigger.dataset.summary || 'all' : 'all';
+    state.pipelineFilters.summary = state.pipelineFilters.summary === summary ? 'all' : summary;
+    save();
+    renderPipelinePage();
   });
 
-  els.table.addEventListener('keydown', (event) => {
+  els.pipelineBoard?.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-    const row = target.closest('tr[data-id]');
-    if (!row) return;
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    if (target.closest('input, select, button, textarea')) return;
-    event.preventDefault();
-    openStartupDetail(row.dataset.id, 'overview');
-  });
-
-  els.table.addEventListener('change', (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-
-    if (target.id === 'tableSelectAll' && target instanceof HTMLInputElement) {
-      const rows = visibleCandidates();
-      state.selectedRows = target.checked ? rows.map((row) => row.id) : [];
-      save();
-      renderTable();
+    const card = target.closest('[data-candidate-id]');
+    const candidateId = card instanceof HTMLElement ? card.dataset.candidateId || '' : '';
+    const candidate = getCandidateById(candidateId);
+    if (target.dataset.action === 'pipeline-open-detail') {
+      if (!candidate) return;
+      openStartupDetail(candidate.id, 'overview');
       return;
     }
+    if (target.dataset.action === 'pipeline-move-next') {
+      if (!candidate) return;
+      const nextStage = nextPipelineStage(candidateStage(candidate));
+      if (!nextStage) return;
+      persistPipelineStageChange(candidate, nextStage, {
+        source: 'pipeline-board-action',
+        successMessage: `Moved to ${pipelineStageLabel(nextStage)}.`,
+      }).catch(console.error);
+      return;
+    }
+    if (target.dataset.action === 'pipeline-mark-pass') {
+      const candidateId = target.dataset.id || '';
+      const candidate = getCandidateById(candidateId);
+      if (!candidate) return;
+      const passReason = window.prompt(`Why is ${candidate.name} being marked Pass?`, '');
+      if (passReason === null) return;
+      persistPipelineStageChange(candidate, 'pass', {
+        source: 'pipeline-board-action',
+        passReason: passReason.trim(),
+        successMessage: 'Moved to Pass.',
+      }).catch(console.error);
+      return;
+    }
+    if (target.dataset.action === 'pipeline-run-ai') {
+      runPipelineAiReview(target.dataset.id || '', 'pipeline-board').catch(console.error);
+      return;
+    }
+    if (target.dataset.action === 'pipeline-add-note') {
+      addQuickPipelineNote(target.dataset.id || '').catch(console.error);
+      return;
+    }
+    if (target.closest('button, input, select, textarea, label')) return;
+    if (candidate) openPipelineDrawer(candidate.id);
+  });
 
-    if (target.dataset.action === 'toggle-select' && target instanceof HTMLInputElement) {
+  els.pipelineBoard?.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action === 'pipeline-select' && target instanceof HTMLInputElement) {
       const set = selectedRowSet();
       if (target.checked) set.add(target.dataset.id);
       else set.delete(target.dataset.id);
       state.selectedRows = [...set];
       save();
-      renderTable();
+      renderPipelinePage();
+    }
+  });
+
+  els.pipelineBoard?.addEventListener('dragstart', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const card = target.closest('[data-candidate-id]');
+    if (!(card instanceof HTMLElement)) return;
+    state.pipelineDragId = card.dataset.candidateId || null;
+    event.dataTransfer?.setData('text/plain', state.pipelineDragId || '');
+    event.dataTransfer.effectAllowed = 'move';
+    card.classList.add('is-dragging');
+  });
+
+  els.pipelineBoard?.addEventListener('dragend', (event) => {
+    const target = event.target;
+    if (target instanceof HTMLElement) {
+      target.closest('[data-candidate-id]')?.classList.remove('is-dragging');
+    }
+    state.pipelineDragId = null;
+    els.pipelineBoard.querySelectorAll('.is-drop-target').forEach((node) => node.classList.remove('is-drop-target'));
+  });
+
+  els.pipelineBoard?.addEventListener('dragover', (event) => {
+    const zone = event.target instanceof HTMLElement ? event.target.closest('[data-stage-dropzone]') : null;
+    if (!(zone instanceof HTMLElement)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    els.pipelineBoard.querySelectorAll('.is-drop-target').forEach((node) => node.classList.remove('is-drop-target'));
+    zone.classList.add('is-drop-target');
+  });
+
+  els.pipelineBoard?.addEventListener('drop', (event) => {
+    const zone = event.target instanceof HTMLElement ? event.target.closest('[data-stage-dropzone]') : null;
+    if (!(zone instanceof HTMLElement)) return;
+    event.preventDefault();
+    const candidate = getCandidateById(state.pipelineDragId || '');
+    const nextStage = zone.dataset.stageDropzone || '';
+    zone.classList.remove('is-drop-target');
+    if (!candidate || !nextStage || candidateStage(candidate) === nextStage) return;
+    const passReason = nextStage === 'pass' ? window.prompt(`Why is ${candidate.name} being marked Pass?`, '') : '';
+    if (nextStage === 'pass' && passReason === null) return;
+    persistPipelineStageChange(candidate, nextStage, {
+      source: 'pipeline-board-drag',
+      passReason: passReason.trim(),
+      successMessage: `Moved to ${pipelineStageLabel(nextStage)}.`,
+    }).catch(console.error);
+  });
+
+  els.pipelineDrawer?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target.dataset.action === 'pipeline-close-drawer') {
+      state.pipelineDrawerId = null;
+      save();
+      renderPipelinePage();
       return;
     }
-
-    if (target.dataset.action === 'edit-stage' && target instanceof HTMLSelectElement) {
-      const candidate = getCandidateById(target.dataset.id);
-      if (!candidate) return;
-      if (state.serverMode) {
-        updateStartupRemote(target.dataset.id, { stage: target.value })
-          .then((saved) => {
-            Object.assign(candidate, saved);
-            save();
-            renderTable();
-          })
-          .catch((error) => {
-            alert(error.message);
-            target.value = candidateStage(candidate);
-          });
-        return;
-      }
-      candidate.stage = target.value;
-      save();
-      renderTable();
+    if (target.dataset.action === 'pipeline-open-full-detail') {
+      openStartupDetail(target.dataset.id, 'overview');
       return;
     }
-
-    if (target.dataset.action === 'edit-owner' && target instanceof HTMLInputElement) {
-      const candidate = getCandidateById(target.dataset.id);
+    if (target.dataset.action === 'pipeline-run-ai') {
+      runPipelineAiReview(target.dataset.id || '', 'pipeline-drawer').catch(console.error);
+      return;
+    }
+    if (target.dataset.action === 'pipeline-move-next') {
+      const candidate = getCandidateById(target.dataset.id || '');
       if (!candidate) return;
-      const detail = startupDetail(candidate);
-      candidate.detail = {
-        ...detail,
-        overview: {
-          ...detail.overview,
-          owner: target.value.trim(),
-        },
-      };
-      if (state.serverMode) {
-        persistStartupDetailPatch(candidate.id, {
-          detail: candidate.detail,
-        }, { rerender: true, successMessage: 'Owner saved.' }).catch(console.error);
-        return;
-      }
-      save();
-      renderTable();
+      const nextStage = nextPipelineStage(candidateStage(candidate));
+      if (!nextStage) return;
+      persistPipelineStageChange(candidate, nextStage, {
+        source: 'pipeline-drawer',
+        successMessage: `Moved to ${pipelineStageLabel(nextStage)}.`,
+      }).catch(console.error);
+      return;
+    }
+    if (target.dataset.action === 'pipeline-mark-pass') {
+      const candidate = getCandidateById(target.dataset.id || '');
+      if (!candidate) return;
+      const passReason = window.prompt(`Why is ${candidate.name} being marked Pass?`, '');
+      if (passReason === null) return;
+      persistPipelineStageChange(candidate, 'pass', {
+        source: 'pipeline-drawer',
+        passReason: passReason.trim(),
+        successMessage: 'Moved to Pass.',
+      }).catch(console.error);
+      return;
+    }
+    if (target.dataset.action === 'pipeline-add-note') {
+      addQuickPipelineNote(target.dataset.id || '').catch(console.error);
     }
   });
 
@@ -4560,7 +5203,10 @@ function attachEvents() {
     if (target.dataset.action === 'analysis-open-pipeline') {
       const candidate = getCandidateById(target.dataset.id);
       if (!candidate) return;
-      openStartupDetail(candidate.id, 'overview');
+      state.activePane = 'table';
+      state.pipelineDrawerId = candidate.id;
+      save();
+      renderAll();
       return;
     }
     if (target.dataset.action === 'analysis-compare-top') {
@@ -4598,31 +5244,6 @@ function attachEvents() {
     }
   });
 
-  els.table.addEventListener('change', (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (target.dataset.action === 'edit-tags' && target instanceof HTMLInputElement) {
-      const candidate = getCandidateById(target.dataset.id);
-      if (!candidate) return;
-      const nextTags = normalizeTagList(target.value);
-      if (state.serverMode) {
-        updateStartupRemote(target.dataset.id, { tags: nextTags })
-          .then((saved) => {
-            Object.assign(candidate, saved);
-            save();
-            renderTable();
-          })
-          .catch((error) => {
-            alert(error.message);
-            target.value = candidateTags(candidate).join(', ');
-          });
-        return;
-      }
-      candidate.tags = nextTags;
-      save();
-    }
-  });
-
   els.detailTabPanel?.addEventListener('change', (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -4634,6 +5255,7 @@ function attachEvents() {
       setDetailStatus('Saving stage…', 'neutral');
       persistStartupDetailPatch(candidate.id, {
         stage: target.value,
+        source: 'startup-detail',
       }, { rerender: true, successMessage: 'Stage saved.' }).catch(console.error);
       return;
     }
@@ -5159,13 +5781,6 @@ function attachEvents() {
 
   els.guideMetric.addEventListener('change', renderGuide);
 
-  const rebuildDraft = () => {
-    syncNewDraftMetaFromInputs();
-    buildDraftFromSelections();
-    renderNewForm();
-    markNewDraftSaved(state.serverMode ? 'Draft prefilled and saved to server.' : 'Draft prefilled and saved locally.').catch(console.error);
-    setFeedback('Draft prefilled.', 'neutral');
-  };
   els.newDraftPicker?.addEventListener('change', () => {
     els.loadDraftBtn.disabled = !els.newDraftPicker.value;
     els.deleteDraftBtn.disabled = !(state.newDraftMeta.draftId || els.newDraftPicker.value);
@@ -5209,14 +5824,18 @@ function attachEvents() {
       setFeedback('Draft removed locally, but server delete failed.', 'error');
     }
   });
-  els.prefillBtn.addEventListener('click', rebuildDraft);
-  els.newTemplate.addEventListener('change', rebuildDraft);
-  els.newClone.addEventListener('change', rebuildDraft);
-  els.newNotesMode.addEventListener('change', rebuildDraft);
+  els.newNotesMode.addEventListener('change', () => {
+    syncNewDraftMetaFromInputs();
+    buildDraftFromSelections();
+    renderNewForm();
+    markNewDraftSaved(state.serverMode ? 'Draft updated and saved to server.' : 'Draft updated and saved locally.').catch(console.error);
+    setFeedback('Notes setup updated.', 'neutral');
+  });
   els.newName.addEventListener('input', () => {
     syncNewDraftMetaFromInputs();
     scheduleNewDraftPersist();
     renderNewDraftStatus();
+    refreshNewSectionStatuses();
   });
 
   els.saveDraftBtn.addEventListener('click', () => {
@@ -5229,8 +5848,6 @@ function attachEvents() {
   els.clearBtn.addEventListener('click', () => {
     const currentDraftId = state.newDraftMeta.draftId || '';
     els.newName.value = '';
-    els.newTemplate.value = 'balanced';
-    els.newClone.value = '';
     els.newNotesMode.value = 'empty';
     resetNewDraftMeta();
     state.newDraftMeta.draftId = currentDraftId;
@@ -5251,6 +5868,7 @@ function attachEvents() {
     const v = validateDraft();
     if (!v.ok) {
       setFeedback(v.message, 'error');
+      renderNewForm();
       focusDraftField(v.metric, v.role);
       return;
     }
@@ -5269,7 +5887,7 @@ function attachEvents() {
       isNew: true,
       computed: { nonFinancial: 0, financial: 0, total: 0 },
       tags: [],
-      stage: 'sourcing',
+      stage: 'on-deck',
       lastAiEvaluationId: null,
     };
 
@@ -5337,90 +5955,6 @@ function attachEvents() {
       .catch((error) => {
         alert(error.message);
       });
-  });
-
-  els.exportBtn.addEventListener('click', () => {
-    if (!state.serverMode) {
-      const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'vc-scouting-workbench-export.json';
-      a.click();
-      URL.revokeObjectURL(url);
-      return;
-    }
-    fetch(EXPORT_URL)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Export failed: ${res.status}`);
-        return res.json();
-      })
-      .then((snapshot) => {
-        const blob = new Blob([JSON.stringify({
-          ...snapshot,
-          ui: serializeUi(),
-          newStartupDrafts: clone(state.newStartupDrafts || snapshot.newStartupDrafts || []),
-          newStartupDraft: serializeNewStartupDraft(),
-        }, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'vc-scouting-workbench-export.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      })
-      .catch((error) => {
-        alert(error.message);
-      });
-  });
-
-  els.importInput.addEventListener('change', async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const snap = JSON.parse(text);
-      if (!snap?.model || !Array.isArray(snap?.candidates)) throw new Error('Invalid JSON format');
-      if (!state.serverMode) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-          ui: snap.ui || serializeUi(),
-          newStartupDrafts: snap.newStartupDrafts || (snap.newStartupDraft ? [snap.newStartupDraft] : []),
-          newStartupDraft: snap.newStartupDraft || null,
-        }));
-        hydrate({
-          ...snap,
-          newStartupDraft: snap.newStartupDraft || snap.newStartupDrafts?.[0] || null,
-          newStartupDrafts: snap.newStartupDrafts || (snap.newStartupDraft ? [snap.newStartupDraft] : []),
-        });
-        renderAll();
-        refreshRemoteDerivedData().catch(console.error);
-        return;
-      }
-      const res = await fetch(IMPORT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(snap),
-      });
-      if (!res.ok) throw new Error(`Import failed: ${res.status}`);
-      const saved = await res.json();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        ui: snap.ui || serializeUi(),
-        newStartupDrafts: snap.newStartupDrafts || (snap.newStartupDraft ? [snap.newStartupDraft] : []),
-        newStartupDraft: snap.newStartupDraft || null,
-      }));
-      hydrate({
-        ...saved,
-        ui: snap.ui || serializeUi(),
-        newStartupDraft: snap.newStartupDraft || snap.newStartupDrafts?.[0] || saved.newStartupDraft || null,
-        newStartupDrafts: snap.newStartupDrafts || saved.newStartupDrafts || (snap.newStartupDraft ? [snap.newStartupDraft] : []),
-      });
-      renderAll();
-      refreshRemoteDerivedData().catch(console.error);
-    } catch (err) {
-      alert(`Import failed: ${err.message}`);
-    } finally {
-      event.target.value = '';
-    }
   });
 
   window.addEventListener('resize', () => {

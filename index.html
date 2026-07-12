@@ -8,31 +8,33 @@
 </head>
 <body>
   <div class="app">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">VC Scouting Model</p>
-        <h1>Scouting Scoring Workbench</h1>
+    <header class="topbar card">
+      <div class="topbar-brand">
+        <div class="topbar-copy">
+          <p class="eyebrow">VC Startup Selection Model</p>
+          <h1 class="hero-title">Scouting Workspace</h1>
+          <p class="hero-subtitle">Pipeline, scoring, and startup review in one operating surface.</p>
+        </div>
+        <div class="workspace-strip">
+          <div class="workspace-strip-head">
+            <span class="workspace-label">Workspace</span>
+          </div>
+          <nav class="nav nav-top">
+            <button class="nav-btn is-active" data-pane="table" type="button">Pipeline</button>
+            <button class="nav-btn" data-pane="new" type="button">New Startup</button>
+            <button class="nav-btn" data-pane="weights" type="button">Model Settings</button>
+            <button class="nav-btn" data-pane="detail" type="button">Startup Detail</button>
+            <button class="nav-btn" data-pane="analysis" type="button">Analysis</button>
+            <button class="nav-btn" data-pane="compare" type="button">Compare</button>
+          </nav>
+        </div>
       </div>
       <div class="top-actions">
-        <button id="resetBtn" class="ghost" type="button">Reset</button>
-        <button id="exportBtn" class="ghost" type="button">Export JSON</button>
-        <label class="ghost file-label" for="importInput">Import JSON</label>
-        <input id="importInput" type="file" accept="application/json" hidden />
+        <button id="resetBtn" class="ghost" type="button">Reset Workspace</button>
       </div>
     </header>
 
     <main class="layout">
-      <aside class="sidebar card">
-        <h2>Workspace</h2>
-        <p class="muted">Choose your workflow.</p>
-        <nav class="nav">
-          <button class="nav-btn is-active" data-pane="table" type="button">Pipeline</button>
-          <button class="nav-btn" data-pane="detail" type="button">Startup Detail</button>
-          <button class="nav-btn" data-pane="analysis" type="button">Analysis</button>
-          <button class="nav-btn" data-pane="compare" type="button">Compare</button>
-        </nav>
-      </aside>
-
       <section class="main card">
         <section class="pane" data-pane="analysis" hidden>
           <div class="section-head">
@@ -236,95 +238,128 @@
         <section class="pane" data-pane="table">
           <div class="section-head">
             <h2>Pipeline</h2>
-            <p class="muted">Manage startups, add new records, and tune the scoring model in one workspace.</p>
+            <p class="muted">Run the active dealflow, move startups across decision stages, and manage the board in one place.</p>
           </div>
-          <div class="card">
-            <div class="row between metric-editor-head">
-              <div>
-                <h3>Pipeline Table</h3>
-                <p class="muted">Search, sort, select, tag, stage, and manage the live pipeline.</p>
+          <div class="pipeline-page">
+            <div class="card pipeline-controls-card">
+              <div class="pipeline-controls-grid">
+                <label>Search <input id="searchInput" type="text" placeholder="Search startup, thesis, or owner" /></label>
+                <label>Sort
+                  <select id="sortSelect">
+                    <option value="total-desc">Total High-Low</option>
+                    <option value="total-asc">Total Low-High</option>
+                    <option value="name-asc">Name A-Z</option>
+                    <option value="name-desc">Name Z-A</option>
+                  </select>
+                </label>
+                <label>Saved View
+                  <select id="savedViewSelect">
+                    <option value="all">All pipeline</option>
+                    <option value="ic-ready">IC-ready</option>
+                    <option value="needs-diligence">Needs diligence</option>
+                    <option value="financial-weak">Financial weak</option>
+                    <option value="low-evidence">Low evidence</option>
+                    <option value="high-conviction">High conviction</option>
+                    <option value="ai-pending">AI pending</option>
+                  </select>
+                </label>
+                <button id="pipelineOpenNewBtn" type="button">Add Startup</button>
+              </div>
+              <details id="pipelineAdvancedFilters" class="pipeline-advanced" open>
+                <summary>Advanced filters and saved views</summary>
+                <div class="pipeline-toolbar pipeline-toolbar-advanced">
+                  <label>Quadrant
+                    <select id="quadrantSelect">
+                      <option value="all">All</option>
+                      <option value="top-right">Top-right</option>
+                      <option value="top-left">Top-left</option>
+                      <option value="bottom-right">Bottom-right</option>
+                      <option value="bottom-left">Bottom-left</option>
+                    </select>
+                  </label>
+                  <label>Owner
+                    <select id="pipelineOwnerFilter">
+                      <option value="all">All owners</option>
+                    </select>
+                  </label>
+                  <label>Tags
+                    <input id="pipelineTagFilter" type="text" placeholder="e.g. AI, Climate" />
+                  </label>
+                  <label>Confidence
+                    <select id="pipelineConfidenceFilter">
+                      <option value="all">All bands</option>
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                  </label>
+                  <label>Evidence
+                    <select id="pipelineEvidenceFilter">
+                      <option value="all">All bands</option>
+                      <option value="strong">Strong</option>
+                      <option value="moderate">Moderate</option>
+                      <option value="weak">Weak</option>
+                    </select>
+                  </label>
+                  <label>Stale Activity
+                    <select id="pipelineStaleFilter">
+                      <option value="all">Any activity</option>
+                      <option value="7">7+ days</option>
+                      <option value="14">14+ days</option>
+                      <option value="30">30+ days</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="pipeline-toolbar pipeline-toolbar-saved">
+                  <label>Saved Filters
+                    <select id="pipelineFilterSelect">
+                      <option value="">Current filters</option>
+                    </select>
+                  </label>
+                  <label>View Name
+                    <input id="pipelineFilterName" type="text" placeholder="e.g. Partner review shortlist" />
+                  </label>
+                  <button id="savePipelineFilterBtn" class="ghost" type="button">Save View</button>
+                  <button id="deletePipelineFilterBtn" class="ghost" type="button">Delete View</button>
+                </div>
+              </details>
+              <div class="pipeline-bulk-bar">
+                <div id="selectionStatus" class="bulk-status">0 selected</div>
+                <label>Tag
+                  <input id="bulkTagInput" type="text" placeholder="e.g. AI, Climate, Deeptech" />
+                </label>
+                <label>Stage
+                  <select id="bulkStageSelect">
+                    <option value="">Choose stage</option>
+                    <option value="on-deck">On Deck</option>
+                    <option value="first-look">First Look</option>
+                    <option value="deep-dive">Deep Dive</option>
+                    <option value="ic-ready">IC Ready</option>
+                    <option value="pass">Pass</option>
+                  </select>
+                </label>
+                <button id="bulkTagBtn" class="ghost" type="button">Apply Tag</button>
+                <button id="bulkStageBtn" class="ghost" type="button">Apply Stage</button>
+                <button id="clearPipelineSelectionBtn" class="ghost" type="button">Clear Selection</button>
+                <button id="bulkDeleteBtn" class="remove-btn" type="button">Delete Selected</button>
               </div>
             </div>
-            <div class="grid-4">
-              <label>Search <input id="searchInput" type="text" placeholder="Search startup" /></label>
-              <label>Sort
-                <select id="sortSelect">
-                  <option value="total-desc">Total High-Low</option>
-                  <option value="total-asc">Total Low-High</option>
-                  <option value="name-asc">Name A-Z</option>
-                  <option value="name-desc">Name Z-A</option>
-                </select>
-              </label>
-              <label>Quadrant
-                <select id="quadrantSelect">
-                  <option value="all">All</option>
-                  <option value="top-right">Top-right</option>
-                  <option value="top-left">Top-left</option>
-                  <option value="bottom-right">Bottom-right</option>
-                  <option value="bottom-left">Bottom-left</option>
-                </select>
-              </label>
-              <label>Saved View
-                <select id="savedViewSelect">
-                  <option value="all">All pipeline</option>
-                  <option value="ic-ready">IC-ready</option>
-                  <option value="needs-diligence">Needs diligence</option>
-                  <option value="financial-weak">Financial weak</option>
-                </select>
-              </label>
-            </div>
-            <div class="pipeline-toolbar">
-              <label>Saved Filters
-                <select id="pipelineFilterSelect">
-                  <option value="">Current filters</option>
-                </select>
-              </label>
-              <label>Filter Name
-                <input id="pipelineFilterName" type="text" placeholder="e.g. Partner review shortlist" />
-              </label>
-              <button id="savePipelineFilterBtn" class="ghost" type="button">Save Filters</button>
-              <button id="deletePipelineFilterBtn" class="ghost" type="button">Delete Saved Filter</button>
-              <details class="column-picker">
-                <summary>Columns</summary>
-                <div id="pipelineColumnList" class="column-picker-list"></div>
-              </details>
-            </div>
-            <div class="bulk-toolbar">
-              <label class="bulk-check">
-                <input id="selectVisibleToggle" type="checkbox" />
-                Select visible
-              </label>
-              <div id="selectionStatus" class="bulk-status">0 selected</div>
-              <label>Tag
-                <input id="bulkTagInput" type="text" placeholder="e.g. AI, Climate, Deeptech" />
-              </label>
-              <label>Stage
-                <select id="bulkStageSelect">
-                  <option value="">Choose stage</option>
-                  <option value="sourcing">Sourcing</option>
-                  <option value="diligence">Diligence</option>
-                  <option value="ic-ready">IC-ready</option>
-                  <option value="watchlist">Watchlist</option>
-                  <option value="pass">Pass</option>
-                </select>
-              </label>
-              <button id="bulkTagBtn" class="ghost" type="button">Apply Tag</button>
-              <button id="bulkStageBtn" class="ghost" type="button">Apply Stage</button>
-              <button id="bulkDeleteBtn" class="remove-btn" type="button">Delete Selected</button>
-            </div>
-            <div class="table-wrap">
-              <table id="table">
-                <thead></thead>
-                <tbody></tbody>
-              </table>
+
+            <div id="pipelineSummaryStrip" class="pipeline-summary-strip"></div>
+
+            <div class="pipeline-board-shell">
+              <div id="pipelineBoard" class="pipeline-board"></div>
+              <aside id="pipelineDrawer" class="card pipeline-drawer"></aside>
             </div>
           </div>
+        </section>
 
+        <section class="pane" data-pane="new" hidden>
           <details class="card collapsible inner" open>
             <summary>Add Startup to Pipeline</summary>
             <div class="section-head">
               <h2>New Startup</h2>
-              <p class="muted">Fill all scores and explanations before create.</p>
+              <p class="muted">Add the startup once, save draft if needed, then complete the scorecard below.</p>
             </div>
             <div class="draft-library">
               <label>Resume Draft
@@ -340,8 +375,6 @@
             </div>
             <div class="grid-2">
               <label>Startup Name <input id="newName" type="text" placeholder="e.g. NovaFlow AI" /></label>
-              <label>Template <select id="newTemplate"></select></label>
-              <label>Clone From (optional) <select id="newClone"></select></label>
               <label>Notes Setup
                 <select id="newNotesMode">
                   <option value="empty">Empty notes</option>
@@ -350,14 +383,13 @@
               </label>
             </div>
             <div class="row actions">
-              <button id="prefillBtn" class="ghost" type="button">Prefill</button>
               <button id="saveDraftBtn" class="ghost" type="button">Save Draft</button>
               <button id="clearBtn" class="ghost" type="button">Clear</button>
               <button id="createBtn" type="button">Create Startup</button>
             </div>
             <div id="newDraftStatus" class="draft-status">Draft not saved yet.</div>
             <p id="newFeedback" class="feedback" data-type="neutral"></p>
-            <p class="warn">Required: every metric must have score and explanation.</p>
+            <p id="newModeRequirement" class="warn">Required: every metric must have score and explanation.</p>
             <div id="newMetrics" class="metric-form"></div>
 
             <details class="card collapsible inner">
@@ -368,8 +400,10 @@
               <pre id="guideText" class="guide"></pre>
             </details>
           </details>
+        </section>
 
-          <details class="card collapsible inner">
+        <section class="pane" data-pane="weights" hidden>
+          <details class="card collapsible inner" open>
             <summary>Model Settings & Rubrics</summary>
             <div class="section-head">
               <h2>Weights & Rubrics</h2>
@@ -459,7 +493,7 @@
                 </div>
                 <div id="sectionEditorStatus" class="draft-status">Select a section to edit or add a new one.</div>
               </div>
-            </div>
+              </div>
             </div>
           </details>
         </section>

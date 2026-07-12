@@ -77,7 +77,9 @@ function buildActivityEntries(current, next, patch) {
     return entries;
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'stage') && current.stage !== next.stage) {
-    entries.push(historyEntry('stage', `Stage changed from ${current.stage || 'unknown'} to ${next.stage}.`));
+    const source = patch?.source ? ` via ${patch.source}` : '';
+    const passReason = patch?.passReason ? ` Reason: ${patch.passReason}` : '';
+    entries.push(historyEntry('stage', `Stage changed from ${metricModel.stageLabel(current.stage || 'on-deck')} to ${metricModel.stageLabel(next.stage)}${source}.${passReason}`));
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'tags') && !arraysEqual(current.tags || [], next.tags || [])) {
     entries.push(historyEntry('tags', `Tags updated: ${(next.tags || []).join(', ') || 'none'}.`));
@@ -391,7 +393,7 @@ async function readSnapshot() {
     computedFromExcel: row.computed_from_excel_json || null,
     isNew: Boolean(row.is_new),
     tags: row.tags_json || [],
-    stage: row.stage || 'sourcing',
+    stage: metricModel.normalizeStage(row.stage),
     lastAiEvaluationId: row.last_ai_evaluation_id || null,
     detail: row.detail_json || null,
   }, model, index));
@@ -511,7 +513,7 @@ async function loadCandidateForMutation(id) {
     computedFromExcel: rows[0].computed_from_excel_json || null,
     isNew: Boolean(rows[0].is_new),
     tags: rows[0].tags_json || [],
-    stage: rows[0].stage || 'sourcing',
+    stage: metricModel.normalizeStage(rows[0].stage),
     lastAiEvaluationId: rows[0].last_ai_evaluation_id || null,
     detail: rows[0].detail_json || null,
   };

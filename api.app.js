@@ -173,13 +173,24 @@ async function handleApiRequest(req, res, options = {}) {
     } = await getServices();
 
     if (req.method === 'GET' && pathname === '/api/health') {
+      const aiStatus = typeof aiEvaluator.status === 'function'
+        ? aiEvaluator.status()
+        : {
+            available: aiEvaluator.isConfigured(),
+            provider: hasOpenAiConfig() ? 'openai' : 'fallback',
+            model: hasOpenAiConfig() ? OPENAI_MODEL : 'heuristic-rubric-v1',
+            degraded: false,
+            reason: '',
+          };
       json(res, 200, {
         ok: true,
         service: 'vc-api',
         database: HAS_DATABASE_URL,
-        ai: aiEvaluator.isConfigured(),
-        aiProvider: hasOpenAiConfig() ? 'openai' : 'fallback',
-        aiModel: hasOpenAiConfig() ? OPENAI_MODEL : 'heuristic-rubric-v1',
+        ai: aiStatus.available,
+        aiProvider: aiStatus.provider,
+        aiModel: aiStatus.model,
+        aiDegraded: Boolean(aiStatus.degraded),
+        aiReason: aiStatus.reason || '',
       });
       return;
     }

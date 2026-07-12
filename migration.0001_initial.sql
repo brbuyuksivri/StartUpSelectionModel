@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS candidates (
   computed_from_excel_json JSONB,
   is_new BOOLEAN NOT NULL DEFAULT FALSE,
   tags_json JSONB NOT NULL DEFAULT '[]'::jsonb,
-  stage TEXT NOT NULL DEFAULT 'sourcing',
+  stage TEXT NOT NULL DEFAULT 'on-deck',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

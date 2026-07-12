@@ -16,6 +16,21 @@
     custom: 'Custom',
   };
   const GROUP_OPTIONS = ['nonFinancial', 'financial', 'other'];
+  const PIPELINE_STAGES = [
+    { key: 'on-deck', label: 'On Deck' },
+    { key: 'first-look', label: 'First Look' },
+    { key: 'deep-dive', label: 'Deep Dive' },
+    { key: 'ic-ready', label: 'IC Ready' },
+    { key: 'pass', label: 'Pass' },
+  ];
+  const LEGACY_PIPELINE_STAGES = {
+    sourcing: 'on-deck',
+    watchlist: 'first-look',
+    diligence: 'deep-dive',
+    'on deck': 'on-deck',
+    firstlook: 'first-look',
+    deepdive: 'deep-dive',
+  };
   const LEGACY_SOURCE_BY_ACTIVE = {
     A: 'B',
     B: 'C',
@@ -187,6 +202,19 @@
 
   function sectionLabelFor(key) {
     return SECTION_TITLES[key] || key || SECTION_TITLES.custom;
+  }
+
+  function normalizeStage(stage) {
+    const raw = String(stage || '').trim().toLowerCase();
+    if (!raw) return 'on-deck';
+    if (PIPELINE_STAGES.some((item) => item.key === raw)) return raw;
+    if (Object.prototype.hasOwnProperty.call(LEGACY_PIPELINE_STAGES, raw)) return LEGACY_PIPELINE_STAGES[raw];
+    return 'on-deck';
+  }
+
+  function stageLabel(stage) {
+    const normalized = normalizeStage(stage);
+    return PIPELINE_STAGES.find((item) => item.key === normalized)?.label || 'On Deck';
   }
 
   function normalizeSection(section, index = 0) {
@@ -394,7 +422,7 @@
       computedFromExcel: candidate?.computedFromExcel || null,
       isNew: Boolean(candidate?.isNew),
       tags: Array.isArray(candidate?.tags) ? candidate.tags : [],
-      stage: candidate?.stage || 'sourcing',
+      stage: normalizeStage(candidate?.stage),
       lastAiEvaluationId: candidate?.lastAiEvaluationId || null,
       detail: candidate?.detail || null,
     };
@@ -435,6 +463,9 @@
     createInitialMetrics,
     normalizeModel,
     normalizeCandidate,
+    normalizeStage,
+    stageLabel,
+    PIPELINE_STAGES,
     defaultScoreDescriptions,
     formatRubricText,
     createEmptyMetric,

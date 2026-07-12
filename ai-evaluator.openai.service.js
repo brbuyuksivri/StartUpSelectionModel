@@ -192,7 +192,7 @@ function buildEvaluationMessages(startup, metrics) {
         startup: {
           id: startup.id,
           name: startup.name,
-          stage: startup.stage || 'sourcing',
+          stage: startup.stage || 'on-deck',
           tags: Array.isArray(startup.tags) ? startup.tags : [],
           overview: {
             summary: String(detail?.overview?.summary || '').trim(),
@@ -212,17 +212,44 @@ function buildEvaluationMessages(startup, metrics) {
 }
 
 function createOpenAiEvaluator() {
+  let degradedUntil = 0;
+  let degradedReason = '';
+
   return {
     isConfigured() {
       return true;
     },
 
-    async evaluateStartup({ startup, metrics }) {
-      try {
-        if (!OPENAI_API_KEY) {
-          throw new Error('OPENAI_API_KEY is not configured');
-        }
+    status() {
+      const fallbackOnly = !OPENAI_API_KEY;
+      const degraded = Date.now() < degradedUntil;
+      if (fallbackOnly || degraded) {
+        return {
+          available: true,
+          provider: 'fallback',
+          model: 'heuristic-rubric-v1',
+          degraded,
+          reason: degradedReason || (fallbackOnly ? 'OPENAI_API_KEY is not configured' : ''),
+        };
+      }
+      return {
+        available: true,
+        provider: 'openai',
+        model: OPENAI_MODEL,
+        degraded: false,
+        reason: '',
+      };
+    },
 
+    async evaluateStartup({ startup, metrics }) {
+      if (!OPENAI_API_KEY) {
+        return fallbackEvaluation(startup, metrics, 'OPENAI_API_KEY is not configured');
+      }
+      if (Date.now() < degradedUntil) {
+        return fallbackEvaluation(startup, metrics, degradedReason || 'OpenAI temporarily unavailable');
+      }
+
+      try {
         const response = await fetch(`${OPENAI_BASE_URL}/chat/completions`, {
           method: 'POST',
           headers: {
@@ -305,6 +332,8 @@ function createOpenAiEvaluator() {
         }
 
         const parsed = JSON.parse(text);
+        degradedUntil = 0;
+        degradedReason = '';
         return {
           provider: 'openai',
           model: OPENAI_MODEL,
@@ -319,6 +348,8 @@ function createOpenAiEvaluator() {
         const reason = String(error.message || '')
           .replace(/\s+/g, ' ')
           .slice(0, 220);
+        degradedUntil = Date.now() + 5 * 60 * 1000;
+        degradedReason = reason;
         return fallbackEvaluation(startup, metrics, reason);
       }
     },
