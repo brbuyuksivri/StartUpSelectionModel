@@ -13,7 +13,6 @@
         <div class="topbar-copy">
           <p class="eyebrow">VC Startup Selection Model</p>
           <h1 class="hero-title">Scouting Workspace</h1>
-          <p class="hero-subtitle">Pipeline, scoring, and startup review in one operating surface.</p>
         </div>
         <div class="workspace-strip">
           <div class="workspace-strip-head">
@@ -29,9 +28,7 @@
           </nav>
         </div>
       </div>
-      <div class="top-actions">
-        <button id="resetBtn" class="ghost" type="button">Reset Workspace</button>
-      </div>
+      <div class="top-actions"></div>
     </header>
 
     <main class="layout">
@@ -69,32 +66,6 @@
             </div>
             <canvas id="scatterCanvas" width="980" height="430"></canvas>
             <div id="scatterLegend" class="legend"></div>
-          </div>
-
-          <div class="card selected-brief-card">
-            <div class="row between">
-              <div>
-                <h3>Selected Startup Brief</h3>
-                <p class="muted">Click a point on the scatter to inspect investment context and next actions.</p>
-              </div>
-              <div class="row brief-actions">
-                <button id="briefCompareBtn" class="ghost" type="button">Compare to Top</button>
-                <button id="briefPipelineBtn" class="ghost" type="button">Open Detail</button>
-              </div>
-            </div>
-            <div id="selectedStartupBrief" class="selected-brief-empty">
-              Select a startup from the scatter to open its analyst brief.
-            </div>
-          </div>
-
-          <div class="card pipeline-board-card">
-            <div class="row between">
-              <div>
-                <h3>Portfolio Triage Board</h3>
-                <p class="muted">Convert the portfolio into actions: who moves forward, who needs diligence, and where evaluation disagreement is highest.</p>
-              </div>
-            </div>
-            <div id="analysisActionBoard"></div>
           </div>
 
           <div class="card ai-workflow-card">
@@ -242,16 +213,8 @@
           </div>
           <div class="pipeline-page">
             <div class="card pipeline-controls-card">
-              <div class="pipeline-controls-grid">
-                <label>Search <input id="searchInput" type="text" placeholder="Search startup, thesis, or owner" /></label>
-                <label>Sort
-                  <select id="sortSelect">
-                    <option value="total-desc">Total High-Low</option>
-                    <option value="total-asc">Total Low-High</option>
-                    <option value="name-asc">Name A-Z</option>
-                    <option value="name-desc">Name Z-A</option>
-                  </select>
-                </label>
+              <div class="pipeline-command-rail">
+                <label class="pipeline-rail-search">Search <input id="searchInput" type="text" placeholder="Search startup, thesis, or owner" /></label>
                 <label>Saved View
                   <select id="savedViewSelect">
                     <option value="all">All pipeline</option>
@@ -263,10 +226,23 @@
                     <option value="ai-pending">AI pending</option>
                   </select>
                 </label>
+                <label>Sort
+                  <select id="sortSelect">
+                    <option value="total-desc">Total High-Low</option>
+                    <option value="total-asc">Total Low-High</option>
+                    <option value="name-asc">Name A-Z</option>
+                    <option value="name-desc">Name Z-A</option>
+                  </select>
+                </label>
+                <div class="pipeline-density-switch" role="group" aria-label="Pipeline density">
+                  <button id="pipelineDensityComfortableBtn" class="ghost" type="button" data-density-mode="comfortable">Comfortable</button>
+                  <button id="pipelineDensityCompactBtn" class="ghost" type="button" data-density-mode="compact">Compact</button>
+                </div>
+                <button id="pipelineFiltersToggleBtn" class="ghost" type="button" aria-expanded="false">Filters</button>
                 <button id="pipelineOpenNewBtn" type="button">Add Startup</button>
               </div>
-              <details id="pipelineAdvancedFilters" class="pipeline-advanced" open>
-                <summary>Advanced filters and saved views</summary>
+              <div id="pipelineActiveFilterChips" class="pipeline-active-filters"></div>
+              <details id="pipelineAdvancedFilters" class="pipeline-advanced">
                 <div class="pipeline-toolbar pipeline-toolbar-advanced">
                   <label>Quadrant
                     <select id="quadrantSelect">
@@ -323,7 +299,7 @@
                   <button id="deletePipelineFilterBtn" class="ghost" type="button">Delete View</button>
                 </div>
               </details>
-              <div class="pipeline-bulk-bar">
+              <div id="pipelineBulkBar" class="pipeline-bulk-bar" hidden>
                 <div id="selectionStatus" class="bulk-status">0 selected</div>
                 <label>Tag
                   <input id="bulkTagInput" type="text" placeholder="e.g. AI, Climate, Deeptech" />
@@ -349,7 +325,26 @@
 
             <div class="pipeline-board-shell">
               <div id="pipelineBoard" class="pipeline-board"></div>
-              <aside id="pipelineDrawer" class="card pipeline-drawer"></aside>
+            </div>
+            <div id="pipelineToast" class="pipeline-toast" hidden></div>
+            <div id="pipelinePassModal" class="pipeline-modal-shell" hidden>
+              <div class="pipeline-modal-backdrop" data-action="pipeline-close-pass-modal"></div>
+              <div class="pipeline-modal card" role="dialog" aria-modal="true" aria-labelledby="pipelinePassModalTitle">
+                <div class="pipeline-modal-head">
+                  <div>
+                    <h3 id="pipelinePassModalTitle">Move to Pass</h3>
+                    <p id="pipelinePassModalSubtitle" class="muted">Capture an optional reason before closing the loop.</p>
+                  </div>
+                  <button id="pipelinePassModalCloseBtn" class="ghost" type="button" data-action="pipeline-close-pass-modal">Close</button>
+                </div>
+                <label id="pipelinePassReasonLabel"><span id="pipelinePassReasonLabelText">Pass Reason (optional)</span>
+                  <textarea id="pipelinePassReasonInput" rows="4" placeholder="Why is this startup moving to Pass?"></textarea>
+                </label>
+                <div class="pipeline-modal-actions">
+                  <button id="pipelinePassModalCancelBtn" class="ghost" type="button" data-action="pipeline-close-pass-modal">Cancel</button>
+                  <button id="pipelinePassModalConfirmBtn" type="button">Confirm Move</button>
+                </div>
+              </div>
             </div>
           </div>
         </section>

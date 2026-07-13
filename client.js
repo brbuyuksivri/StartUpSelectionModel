@@ -123,7 +123,11 @@ const els = {
   sortSelect: document.getElementById('sortSelect'),
   quadrantSelect: document.getElementById('quadrantSelect'),
   savedViewSelect: document.getElementById('savedViewSelect'),
+  pipelineDensityComfortableBtn: document.getElementById('pipelineDensityComfortableBtn'),
+  pipelineDensityCompactBtn: document.getElementById('pipelineDensityCompactBtn'),
+  pipelineFiltersToggleBtn: document.getElementById('pipelineFiltersToggleBtn'),
   pipelineOpenNewBtn: document.getElementById('pipelineOpenNewBtn'),
+  pipelineActiveFilterChips: document.getElementById('pipelineActiveFilterChips'),
   pipelineAdvancedFilters: document.getElementById('pipelineAdvancedFilters'),
   pipelineOwnerFilter: document.getElementById('pipelineOwnerFilter'),
   pipelineTagFilter: document.getElementById('pipelineTagFilter'),
@@ -134,9 +138,17 @@ const els = {
   pipelineFilterName: document.getElementById('pipelineFilterName'),
   savePipelineFilterBtn: document.getElementById('savePipelineFilterBtn'),
   deletePipelineFilterBtn: document.getElementById('deletePipelineFilterBtn'),
+  pipelineBulkBar: document.getElementById('pipelineBulkBar'),
   pipelineSummaryStrip: document.getElementById('pipelineSummaryStrip'),
   pipelineBoard: document.getElementById('pipelineBoard'),
   pipelineDrawer: document.getElementById('pipelineDrawer'),
+  pipelineToast: document.getElementById('pipelineToast'),
+  pipelinePassModal: document.getElementById('pipelinePassModal'),
+  pipelinePassModalTitle: document.getElementById('pipelinePassModalTitle'),
+  pipelinePassModalSubtitle: document.getElementById('pipelinePassModalSubtitle'),
+  pipelinePassReasonLabelText: document.getElementById('pipelinePassReasonLabelText'),
+  pipelinePassReasonInput: document.getElementById('pipelinePassReasonInput'),
+  pipelinePassModalConfirmBtn: document.getElementById('pipelinePassModalConfirmBtn'),
   selectionStatus: document.getElementById('selectionStatus'),
   bulkTagInput: document.getElementById('bulkTagInput'),
   bulkStageSelect: document.getElementById('bulkStageSelect'),
@@ -196,9 +208,13 @@ const state = {
   pipelineSavedFilters: [],
   selectedPipelineFilterId: '',
   pipelineFilters: { ...DEFAULT_PIPELINE_FILTERS },
-  pipelineAdvancedOpen: true,
+  pipelineAdvancedOpen: false,
+  pipelineDensity: 'comfortable',
   pipelineDrawerId: null,
   pipelineDragId: null,
+  pipelinePassModal: null,
+  pipelineToast: null,
+  pipelineToastTimer: null,
   compareA: null,
   compareB: null,
   compareMode: 'raw',
@@ -861,6 +877,7 @@ function serializeUi() {
     selectedPipelineFilterId: state.selectedPipelineFilterId,
     pipelineFilters: clone(state.pipelineFilters),
     pipelineAdvancedOpen: state.pipelineAdvancedOpen,
+    pipelineDensity: state.pipelineDensity,
     compareA: state.compareA,
     compareB: state.compareB,
     compareMode: state.compareMode,
@@ -1138,7 +1155,10 @@ function hydrate(snapshot) {
   state.selectedPipelineFilterId = ui.selectedPipelineFilterId || '';
   state.pipelineFilters = normalizePipelineFilters(ui.pipelineFilters);
   state.pipelineAdvancedOpen = ui.pipelineAdvancedOpen !== false;
+  state.pipelineDensity = ui.pipelineDensity === 'compact' ? 'compact' : 'comfortable';
   state.pipelineDrawerId = null;
+  state.pipelinePassModal = null;
+  state.pipelineToast = null;
   state.compareA = ui.compareA || state.candidates[0]?.id || null;
   state.compareB = ui.compareB || state.candidates.find((c) => c.id !== state.compareA)?.id || state.compareA;
   state.compareMode = ui.compareMode || 'raw';
@@ -3236,6 +3256,82 @@ function pipelineToneClass(value, medium = 0.55, high = 0.8) {
   return 'is-weak';
 }
 
+function setPipelineToast(message, type = 'neutral') {
+  if (state.pipelineToastTimer) {
+    window.clearTimeout(state.pipelineToastTimer);
+    state.pipelineToastTimer = null;
+  }
+  if (!message) {
+    state.pipelineToast = null;
+    renderPipelinePage();
+    return;
+  }
+  state.pipelineToast = { message, type };
+  renderPipelinePage();
+  state.pipelineToastTimer = window.setTimeout(() => {
+    state.pipelineToast = null;
+    renderPipelinePage();
+  }, 2800);
+}
+
+function clearPipelineFilters() {
+  state.search = '';
+  state.savedView = 'all';
+  state.quadrant = 'all';
+  state.pipelineFilters = { ...DEFAULT_PIPELINE_FILTERS };
+  clearActivePipelineFilterSelection();
+  state.selectedRows = [];
+}
+
+function pipelineActiveFilters() {
+  const chips = [];
+  if (state.search.trim()) chips.push({ key: 'search', label: `Search: ${state.search.trim()}` });
+  if (state.savedView !== 'all') chips.push({ key: 'savedView', label: `View: ${state.savedView}` });
+  if (state.quadrant !== 'all') chips.push({ key: 'quadrant', label: `Quadrant: ${state.quadrant}` });
+  if (state.pipelineFilters.owner !== 'all') chips.push({ key: 'owner', label: `Owner: ${state.pipelineFilters.owner}` });
+  if (state.pipelineFilters.tags.trim()) chips.push({ key: 'tags', label: `Tags: ${state.pipelineFilters.tags.trim()}` });
+  if (state.pipelineFilters.confidence !== 'all') chips.push({ key: 'confidence', label: `Confidence: ${state.pipelineFilters.confidence}` });
+  if (state.pipelineFilters.evidence !== 'all') chips.push({ key: 'evidence', label: `Evidence: ${state.pipelineFilters.evidence}` });
+  if (state.pipelineFilters.staleDays !== 'all') chips.push({ key: 'staleDays', label: `Stale: ${state.pipelineFilters.staleDays}+ days` });
+  if (state.pipelineFilters.summary !== 'all') chips.push({ key: 'summary', label: `Summary: ${state.pipelineFilters.summary}` });
+  return chips;
+}
+
+function removePipelineFilterChip(key) {
+  if (key === 'search') state.search = '';
+  if (key === 'savedView') state.savedView = 'all';
+  if (key === 'quadrant') state.quadrant = 'all';
+  if (key === 'owner') state.pipelineFilters.owner = 'all';
+  if (key === 'tags') state.pipelineFilters.tags = '';
+  if (key === 'confidence') state.pipelineFilters.confidence = 'all';
+  if (key === 'evidence') state.pipelineFilters.evidence = 'all';
+  if (key === 'staleDays') state.pipelineFilters.staleDays = 'all';
+  if (key === 'summary') state.pipelineFilters.summary = 'all';
+  clearActivePipelineFilterSelection();
+  state.selectedRows = [];
+}
+
+function openPipelinePassModal(config) {
+  state.pipelinePassModal = {
+    open: true,
+    kind: config?.kind || 'pass',
+    candidateId: config?.candidateId || null,
+    candidateName: config?.candidateName || '',
+    targetStage: config?.targetStage || 'pass',
+    source: config?.source || 'pipeline-drawer',
+    bulkIds: Array.isArray(config?.bulkIds) ? [...config.bulkIds] : [],
+  };
+  renderPipelinePage();
+  window.setTimeout(() => {
+    els.pipelinePassReasonInput?.focus();
+  }, 30);
+}
+
+function closePipelinePassModal() {
+  state.pipelinePassModal = null;
+  renderPipelinePage();
+}
+
 function selectedRowSet() {
   return new Set(state.selectedRows);
 }
@@ -3349,27 +3445,99 @@ async function refreshWeightPreview() {
   renderWeights();
 }
 
+function renderPipelineCommandState() {
+  if (els.pipelineAdvancedFilters) {
+    els.pipelineAdvancedFilters.open = !!state.pipelineAdvancedOpen;
+  }
+  if (els.pipelineFiltersToggleBtn) {
+    els.pipelineFiltersToggleBtn.textContent = state.pipelineAdvancedOpen ? 'Hide Filters' : 'Filters';
+    els.pipelineFiltersToggleBtn.setAttribute('aria-expanded', state.pipelineAdvancedOpen ? 'true' : 'false');
+  }
+  if (els.pipelineDensityComfortableBtn) {
+    els.pipelineDensityComfortableBtn.classList.toggle('is-active', state.pipelineDensity !== 'compact');
+  }
+  if (els.pipelineDensityCompactBtn) {
+    els.pipelineDensityCompactBtn.classList.toggle('is-active', state.pipelineDensity === 'compact');
+  }
+}
+
+function renderPipelineActiveFilterChips() {
+  if (!els.pipelineActiveFilterChips) return;
+  const chips = pipelineActiveFilters();
+  if (!chips.length) {
+    els.pipelineActiveFilterChips.innerHTML = '';
+    els.pipelineActiveFilterChips.hidden = true;
+    return;
+  }
+  els.pipelineActiveFilterChips.hidden = false;
+  els.pipelineActiveFilterChips.innerHTML = `
+    ${chips.map((chip) => `
+      <button class="pipeline-filter-chip ghost" type="button" data-action="pipeline-remove-chip" data-chip="${escapeHtml(chip.key)}">
+        <span>${escapeHtml(chip.label)}</span>
+        <strong>×</strong>
+      </button>
+    `).join('')}
+    <button class="pipeline-filter-chip pipeline-filter-chip-clear ghost" type="button" data-action="pipeline-clear-all">
+      Clear all
+    </button>
+  `;
+}
+
+function renderPipelineToast() {
+  if (!els.pipelineToast) return;
+  if (state.activePane !== 'table' || !state.pipelineToast?.message) {
+    els.pipelineToast.hidden = true;
+    els.pipelineToast.textContent = '';
+    els.pipelineToast.dataset.type = 'neutral';
+    return;
+  }
+  els.pipelineToast.hidden = false;
+  els.pipelineToast.dataset.type = state.pipelineToast.type || 'neutral';
+  els.pipelineToast.textContent = state.pipelineToast.message;
+}
+
+function renderPipelinePassModal() {
+  if (!els.pipelinePassModal) return;
+  const open = state.activePane === 'table' && !!state.pipelinePassModal?.open;
+  els.pipelinePassModal.hidden = !open;
+  if (!open) {
+    if (els.pipelinePassReasonInput) els.pipelinePassReasonInput.value = '';
+    return;
+  }
+  const context = state.pipelinePassModal;
+  const isNote = context.kind === 'note';
+  const label = isNote
+    ? `Add a quick note for ${context.candidateName || 'this startup'} without leaving the board.`
+    : (context.bulkIds?.length
+      ? `Move ${context.bulkIds.length} selected startups to Pass. Add a reason if useful for the activity trail.`
+      : `Move ${context.candidateName || 'this startup'} to Pass. Add a reason if useful for the activity trail.`);
+  if (els.pipelinePassModalTitle) {
+    els.pipelinePassModalTitle.textContent = isNote ? 'Add Quick Note' : 'Move to Pass';
+  }
+  if (els.pipelinePassModalSubtitle) {
+    els.pipelinePassModalSubtitle.textContent = label;
+  }
+  if (els.pipelinePassReasonLabelText) {
+    els.pipelinePassReasonLabelText.textContent = isNote ? 'Quick Note' : 'Pass Reason (optional)';
+  }
+  if (els.pipelinePassReasonInput) {
+    els.pipelinePassReasonInput.placeholder = isNote
+      ? `Capture the latest takeaway, risk, or next step for ${context.candidateName || 'this startup'}.`
+      : 'Why is this startup moving to Pass?';
+  }
+  if (els.pipelinePassModalConfirmBtn) {
+    els.pipelinePassModalConfirmBtn.textContent = isNote ? 'Save Note' : 'Confirm Move';
+  }
+}
+
 function renderPipelineSummaryStrip(rows) {
   if (!els.pipelineSummaryStrip) return;
-  const staleDays = Number(state.pipelineFilters.staleDays);
-  const staleWindowDays = Number.isFinite(staleDays) && staleDays > 0 ? staleDays : 14;
-  const staleThreshold = staleWindowDays * 24 * 60 * 60 * 1000;
-  const staleCount = rows.filter((candidate) => {
-    const last = latestActivityAt(candidate);
-    if (!last) return true;
-    return Date.now() - new Date(last).getTime() >= staleThreshold;
-  }).length;
   const inReview = rows.filter((candidate) => ['first-look', 'deep-dive'].includes(candidateStage(candidate))).length;
   const icReady = rows.filter((candidate) => candidateStage(candidate) === 'ic-ready').length;
-  const passed = rows.filter((candidate) => candidateStage(candidate) === 'pass').length;
-  const avgTotal = rows.length ? scoringCore.average(rows.map((candidate) => candidate.computed.total)) : 0;
   const items = [
     { key: 'all', label: 'Total Pipeline', value: rows.length, helper: 'All visible startups' },
-    { key: 'in-review', label: 'In Review', value: inReview, helper: 'First Look + Deep Dive' },
+    { key: 'in-review', label: 'In Review', value: inReview, helper: 'First Look and Deep Dive' },
     { key: 'ic-ready', label: 'IC Ready', value: icReady, helper: 'Ready for partner review' },
-    { key: 'pass', label: 'Passed', value: passed, helper: 'Archived or declined deals' },
-    { key: 'avg-total', label: 'Avg Total Score', value: fmt(avgTotal), helper: 'Visible portfolio average' },
-    { key: 'stale', label: `Stale > ${staleWindowDays} Days`, value: staleCount, helper: 'Needs fresh activity' },
   ];
   els.pipelineSummaryStrip.innerHTML = items.map((item) => `
     <button
@@ -3377,7 +3545,6 @@ function renderPipelineSummaryStrip(rows) {
       type="button"
       data-action="pipeline-summary-filter"
       data-summary="${escapeHtml(item.key)}"
-      ${item.key === 'avg-total' ? 'data-static="true"' : ''}
     >
       <span class="pipeline-summary-label">${escapeHtml(item.label)}</span>
       <strong>${escapeHtml(String(item.value))}</strong>
@@ -3548,14 +3715,22 @@ function renderPipelineDrawer() {
 
 function renderPipelinePage() {
   const rows = visibleCandidates();
+  const selectedTotal = state.selectedRows.length;
+  const visibleSelected = visibleSelectedCount(rows);
+  document.body.classList.toggle('pipeline-density-compact', state.activePane === 'table' && state.pipelineDensity === 'compact');
   renderPipelineFilterOptionControls();
+  renderPipelineCommandState();
+  renderPipelineActiveFilterChips();
   renderPipelineSummaryStrip(rows);
   renderPipelineBoard(rows);
   renderPipelineDrawer();
-  const selectedTotal = state.selectedRows.length;
-  const visibleSelected = visibleSelectedCount(rows);
+  renderPipelinePassModal();
+  renderPipelineToast();
   if (els.selectionStatus) {
     els.selectionStatus.textContent = `${selectedTotal} selected · ${visibleSelected} visible selected · ${rows.length} visible`;
+  }
+  if (els.pipelineBulkBar) {
+    els.pipelineBulkBar.hidden = selectedTotal === 0;
   }
   if (els.bulkTagBtn) els.bulkTagBtn.disabled = selectedTotal === 0;
   if (els.bulkStageBtn) els.bulkStageBtn.disabled = selectedTotal === 0;
@@ -3597,14 +3772,81 @@ async function persistPipelineStageChange(candidate, nextStage, options = {}) {
     recomputeAll();
     save();
     setPipelinePreviewStatus(candidate.id, successMessage, 'success');
+    setPipelineToast(successMessage, 'success');
     renderAll();
     refreshRemoteDerivedData({ workflow: true }).catch(console.error);
   } catch (error) {
     candidate.stage = previousStage;
     setPipelinePreviewStatus(candidate.id, error.message, 'error');
+    setPipelineToast(error.message, 'error');
     save();
     renderPipelinePage();
   }
+}
+
+async function persistBulkPipelineStageChange(ids, nextStage, options = {}) {
+  if (!Array.isArray(ids) || !ids.length || !nextStage) return;
+  const passReason = options.passReason || '';
+  const source = options.source || 'bulk-action';
+  const candidates = ids.map((id) => getCandidateById(id)).filter(Boolean);
+  const previousStages = new Map(candidates.map((candidate) => [candidate.id, candidateStage(candidate)]));
+  candidates.forEach((candidate) => {
+    candidate.stage = nextStage;
+    setPipelinePreviewStatus(candidate.id, `Saving ${pipelineStageLabel(nextStage)}…`, 'neutral');
+  });
+  renderPipelinePage();
+  try {
+    if (state.serverMode) {
+      await Promise.all(candidates.map((candidate) => updateStartupRemote(candidate.id, {
+        stage: nextStage,
+        source,
+        passReason: passReason || undefined,
+      }).then((saved) => Object.assign(candidate, saved))));
+    } else {
+      candidates.forEach((candidate) => {
+        appendLocalHistory(candidate, createHistoryEntry('stage', `Stage changed from ${pipelineStageLabel(previousStages.get(candidate.id))} to ${pipelineStageLabel(nextStage)} via ${source}.${passReason ? ` Reason: ${passReason}` : ''}`));
+      });
+    }
+    recomputeAll();
+    save();
+    candidates.forEach((candidate) => setPipelinePreviewStatus(candidate.id, `Moved to ${pipelineStageLabel(nextStage)}.`, 'success'));
+    setPipelineToast(`${candidates.length} startup${candidates.length === 1 ? '' : 's'} moved to ${pipelineStageLabel(nextStage)}.`, 'success');
+    renderAll();
+    refreshRemoteDerivedData({ workflow: true }).catch(console.error);
+  } catch (error) {
+    candidates.forEach((candidate) => {
+      candidate.stage = previousStages.get(candidate.id) || candidate.stage;
+      setPipelinePreviewStatus(candidate.id, error.message, 'error');
+    });
+    setPipelineToast(error.message, 'error');
+    save();
+    renderPipelinePage();
+  }
+}
+
+async function confirmPipelinePassModal() {
+  if (!state.pipelinePassModal?.open) return;
+  const textValue = String(els.pipelinePassReasonInput?.value || '').trim();
+  const context = state.pipelinePassModal;
+  closePipelinePassModal();
+  if (context.kind === 'note') {
+    await addQuickPipelineNote(context.candidateId || '', textValue);
+    return;
+  }
+  if (Array.isArray(context.bulkIds) && context.bulkIds.length) {
+    await persistBulkPipelineStageChange(context.bulkIds, 'pass', {
+      source: context.source || 'bulk-action',
+      passReason: textValue,
+    });
+    return;
+  }
+  const candidate = getCandidateById(context.candidateId || '');
+  if (!candidate) return;
+  await persistPipelineStageChange(candidate, 'pass', {
+    source: context.source || 'pipeline-drawer',
+    passReason: textValue,
+    successMessage: 'Moved to Pass.',
+  });
 }
 
 async function runPipelineAiReview(candidateId, requestedBy = 'pipeline-board') {
@@ -3632,18 +3874,20 @@ async function runPipelineAiReview(candidateId, requestedBy = 'pipeline-board') 
     await refreshAnalytics({ render: false });
     save();
     setPipelinePreviewStatus(candidateId, `AI review completed for ${candidate.name}.`, 'success');
+    setPipelineToast(`AI review completed for ${candidate.name}.`, 'success');
     renderAll();
   } catch (error) {
     setPipelinePreviewStatus(candidateId, error.message, 'error');
+    setPipelineToast(error.message, 'error');
     renderPipelinePage();
   }
 }
 
-async function addQuickPipelineNote(candidateId) {
+async function addQuickPipelineNote(candidateId, noteText = '') {
   const candidate = getCandidateById(candidateId);
   if (!candidate) return;
-  const note = window.prompt(`Add a quick note for ${candidate.name}:`, '');
-  if (!note || !note.trim()) return;
+  const note = String(noteText || '').trim();
+  if (!note) return;
   const detail = startupDetail(candidate);
   candidate.detail = {
     ...detail,
@@ -3660,9 +3904,11 @@ async function addQuickPipelineNote(candidateId) {
     }
     save();
     setPipelinePreviewStatus(candidateId, 'Quick note saved.', 'success');
+    setPipelineToast('Quick note saved.', 'success');
     renderPipelinePage();
   } catch (error) {
     setPipelinePreviewStatus(candidateId, error.message, 'error');
+    setPipelineToast(error.message, 'error');
     renderPipelinePage();
   }
 }
@@ -4882,9 +5128,28 @@ function attachEvents() {
     renderAll();
   });
 
+  els.pipelineFiltersToggleBtn?.addEventListener('click', () => {
+    state.pipelineAdvancedOpen = !state.pipelineAdvancedOpen;
+    save();
+    renderPipelinePage();
+  });
+
+  els.pipelineDensityComfortableBtn?.addEventListener('click', () => {
+    state.pipelineDensity = 'comfortable';
+    save();
+    renderPipelinePage();
+  });
+
+  els.pipelineDensityCompactBtn?.addEventListener('click', () => {
+    state.pipelineDensity = 'compact';
+    save();
+    renderPipelinePage();
+  });
+
   els.pipelineAdvancedFilters?.addEventListener('toggle', () => {
     state.pipelineAdvancedOpen = els.pipelineAdvancedFilters.open;
     save();
+    renderPipelinePage();
   });
 
   els.pipelineOwnerFilter?.addEventListener('change', () => {
@@ -4959,14 +5224,17 @@ function attachEvents() {
     }
     state.selectedPipelineFilterId = nextFilter.id;
     save();
+    setPipelineToast(`Saved view "${name}".`, 'success');
     renderPipelinePage();
   });
 
   els.deletePipelineFilterBtn?.addEventListener('click', () => {
     if (!state.selectedPipelineFilterId) return;
+    const selected = state.pipelineSavedFilters.find((filter) => filter.id === state.selectedPipelineFilterId);
     state.pipelineSavedFilters = state.pipelineSavedFilters.filter((filter) => filter.id !== state.selectedPipelineFilterId);
     state.selectedPipelineFilterId = '';
     save();
+    setPipelineToast(`Deleted view "${selected?.name || 'saved view'}".`, 'success');
     renderPipelinePage();
   });
 
@@ -4981,37 +5249,29 @@ function attachEvents() {
           return updateStartupRemote(id, { tags: merged });
         }));
       } catch (error) {
-        alert(error.message);
+        setPipelineToast(error.message, 'error');
         return;
       }
     }
     applyTagToSelected(tags);
     els.bulkTagInput.value = '';
     save();
+    setPipelineToast(`Applied ${tags.join(', ')} to ${state.selectedRows.length} startup${state.selectedRows.length === 1 ? '' : 's'}.`, 'success');
     renderPipelinePage();
   });
 
   els.bulkStageBtn.addEventListener('click', async () => {
     const nextStage = els.bulkStageSelect.value;
     if (!nextStage || !state.selectedRows.length) return;
-    const passReason = nextStage === 'pass' ? window.prompt('Why is this startup being marked Pass?', '') : '';
-    if (nextStage === 'pass' && passReason === null) return;
-    if (state.serverMode) {
-      try {
-        await Promise.all(state.selectedRows.map((id) => updateStartupRemote(id, {
-          stage: nextStage,
-          source: 'bulk-action',
-          passReason: passReason || undefined,
-        })));
-      } catch (error) {
-        alert(error.message);
-        return;
-      }
-    }
-    applyStageToSelected(nextStage);
     els.bulkStageSelect.value = '';
-    save();
-    renderPipelinePage();
+    if (nextStage === 'pass') {
+      openPipelinePassModal({
+        bulkIds: [...state.selectedRows],
+        source: 'bulk-action',
+      });
+      return;
+    }
+    await persistBulkPipelineStageChange([...state.selectedRows], nextStage, { source: 'bulk-action' });
   });
 
   els.clearPipelineSelectionBtn?.addEventListener('click', () => {
@@ -5025,14 +5285,34 @@ function attachEvents() {
       try {
         await Promise.all(state.selectedRows.map((id) => apiJson(`${STARTUPS_URL}/${encodeURIComponent(id)}`, { method: 'DELETE' })));
       } catch (error) {
-        alert(error.message);
+        setPipelineToast(error.message, 'error');
         return;
       }
     }
+    const deletedCount = state.selectedRows.length;
     deleteSelectedRows();
     save();
+    setPipelineToast(`Deleted ${deletedCount} startup${deletedCount === 1 ? '' : 's'}.`, 'success');
     renderAll();
     refreshRemoteDerivedData({ workflow: true }).catch(console.error);
+  });
+
+  els.pipelineActiveFilterChips?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const removeChip = target.closest('[data-action="pipeline-remove-chip"]');
+    if (removeChip instanceof HTMLElement) {
+      removePipelineFilterChip(removeChip.dataset.chip || '');
+      save();
+      renderPipelinePage();
+      return;
+    }
+    const clearAll = target.closest('[data-action="pipeline-clear-all"]');
+    if (clearAll) {
+      clearPipelineFilters();
+      save();
+      renderPipelinePage();
+    }
   });
 
   els.pipelineSummaryStrip?.addEventListener('click', (event) => {
@@ -5072,13 +5352,11 @@ function attachEvents() {
       const candidateId = target.dataset.id || '';
       const candidate = getCandidateById(candidateId);
       if (!candidate) return;
-      const passReason = window.prompt(`Why is ${candidate.name} being marked Pass?`, '');
-      if (passReason === null) return;
-      persistPipelineStageChange(candidate, 'pass', {
+      openPipelinePassModal({
+        candidateId: candidate.id,
+        candidateName: candidate.name,
         source: 'pipeline-board-action',
-        passReason: passReason.trim(),
-        successMessage: 'Moved to Pass.',
-      }).catch(console.error);
+      });
       return;
     }
     if (target.dataset.action === 'pipeline-run-ai') {
@@ -5086,7 +5364,14 @@ function attachEvents() {
       return;
     }
     if (target.dataset.action === 'pipeline-add-note') {
-      addQuickPipelineNote(target.dataset.id || '').catch(console.error);
+      const noteCandidate = getCandidateById(target.dataset.id || '');
+      if (!noteCandidate) return;
+      openPipelinePassModal({
+        kind: 'note',
+        candidateId: noteCandidate.id,
+        candidateName: noteCandidate.name,
+        source: 'pipeline-board-action',
+      });
       return;
     }
     if (target.closest('button, input, select, textarea, label')) return;
@@ -5143,11 +5428,16 @@ function attachEvents() {
     const nextStage = zone.dataset.stageDropzone || '';
     zone.classList.remove('is-drop-target');
     if (!candidate || !nextStage || candidateStage(candidate) === nextStage) return;
-    const passReason = nextStage === 'pass' ? window.prompt(`Why is ${candidate.name} being marked Pass?`, '') : '';
-    if (nextStage === 'pass' && passReason === null) return;
+    if (nextStage === 'pass') {
+      openPipelinePassModal({
+        candidateId: candidate.id,
+        candidateName: candidate.name,
+        source: 'pipeline-board-drag',
+      });
+      return;
+    }
     persistPipelineStageChange(candidate, nextStage, {
       source: 'pipeline-board-drag',
-      passReason: passReason.trim(),
       successMessage: `Moved to ${pipelineStageLabel(nextStage)}.`,
     }).catch(console.error);
   });
@@ -5183,17 +5473,41 @@ function attachEvents() {
     if (target.dataset.action === 'pipeline-mark-pass') {
       const candidate = getCandidateById(target.dataset.id || '');
       if (!candidate) return;
-      const passReason = window.prompt(`Why is ${candidate.name} being marked Pass?`, '');
-      if (passReason === null) return;
-      persistPipelineStageChange(candidate, 'pass', {
+      openPipelinePassModal({
+        candidateId: candidate.id,
+        candidateName: candidate.name,
         source: 'pipeline-drawer',
-        passReason: passReason.trim(),
-        successMessage: 'Moved to Pass.',
-      }).catch(console.error);
+      });
       return;
     }
     if (target.dataset.action === 'pipeline-add-note') {
-      addQuickPipelineNote(target.dataset.id || '').catch(console.error);
+      const noteCandidate = getCandidateById(target.dataset.id || '');
+      if (!noteCandidate) return;
+      openPipelinePassModal({
+        kind: 'note',
+        candidateId: noteCandidate.id,
+        candidateName: noteCandidate.name,
+        source: 'pipeline-drawer',
+      });
+    }
+  });
+
+  els.pipelinePassModal?.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const closeTrigger = target.closest('[data-action="pipeline-close-pass-modal"]');
+    if (closeTrigger) {
+      closePipelinePassModal();
+    }
+  });
+
+  els.pipelinePassModalConfirmBtn?.addEventListener('click', () => {
+    confirmPipelinePassModal().catch(console.error);
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.pipelinePassModal?.open) {
+      closePipelinePassModal();
     }
   });
 
@@ -5928,7 +6242,7 @@ function attachEvents() {
     }
   });
 
-  els.resetBtn.addEventListener('click', () => {
+  els.resetBtn?.addEventListener('click', () => {
     if (!state.serverMode) {
       hydrate(freshSnapshot());
       localStorage.removeItem(STORAGE_KEY);
